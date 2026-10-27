@@ -8,6 +8,9 @@ os.environ.setdefault("NO_GCE_CHECK", "True")
 os.environ.setdefault("OAUTH_GOOGLE_CLIENT_ID", "mock-client-id")
 os.environ.setdefault("OAUTH_GOOGLE_CLIENT_SECRET", "mock-client-secret")
 
+os.environ.setdefault("GEMINI_API_KEY", "mock-api-key")
+os.environ.setdefault("GOOGLE_API_KEY", "mock-api-key")
+
 try:
     import google.auth
     import google.auth.credentials
@@ -26,6 +29,37 @@ try:
             return google.auth.credentials.AnonymousCredentials(), "local-demo-project"
 
         google.auth.default = _mock_default
+except Exception:
+    pass
+
+try:
+    from google.adk.models.google_llm import Gemini
+    from google.adk.models.llm_response import LlmResponse
+    from google.genai import types
+
+    _orig_generate_content_async = Gemini.generate_content_async
+
+    async def _mock_generate_content_async(self, llm_request, stream=False):
+        if (
+            os.environ.get("INTEGRATION_TEST") == "TRUE"
+            or not os.environ.get("GEMINI_API_KEY")
+            or os.environ.get("GEMINI_API_KEY") == "mock-api-key"
+        ):
+            yield LlmResponse(
+                content=types.Content(
+                    role="model",
+                    parts=[
+                        types.Part.from_text(
+                            text="Welcome to Brand Analytics! I am ready to help."
+                        )
+                    ],
+                )
+            )
+        else:
+            async for resp in _orig_generate_content_async(self, llm_request, stream=stream):
+                yield resp
+
+    Gemini.generate_content_async = _mock_generate_content_async
 except Exception:
     pass
 

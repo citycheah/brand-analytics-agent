@@ -34,5 +34,7 @@ jobs:
           DATA_BACKEND: "local"
           GOOGLE_GENAI_USE_VERTEXAI: "False"
           INTEGRATION_TEST: "TRUE"
+          GEMINI_API_KEY: "mock-api-key"
+          GOOGLE_API_KEY: "mock-api-key"
         run: |
           uv run pytest tests/unit/ tests/integration/ -v

@@ -25,6 +25,8 @@ def agent_app(monkeypatch: pytest.MonkeyPatch) -> AgentEngineApp:
     """Fixture to create and set up AgentEngineApp instance"""
     # Set integration test flag to mock external services
     monkeypatch.setenv("INTEGRATION_TEST", "TRUE")
+    monkeypatch.setenv("GEMINI_API_KEY", "mock-api-key")
+    monkeypatch.setenv("GOOGLE_API_KEY", "mock-api-key")
 
     from brand_analytics_app.agent_runtime_app import agent_runtime
 

@@ -1,0 +1,57 @@
+/* Custom CSS Styles and Animations for Brand Analytics Agent (Chainlit 2.x) */
+
+/* 1. Chainlit 2.x CSS Variables for the "Thinking/Waiting" Cursor (6 Dots) */
+:root {
+  /* Soft outer glow on the container */
+  --loading-cursor-animation: sixDotsPulse 2s ease-in-out infinite;
+  --loading-cursor-color: hsl(var(--primary));
+  --loading-cursor-size: 4.5rem; /* Wider to accommodate 6 larger dots */
+  
+  /* SVG of 6 dots (3 dots, gap, 3 dots) with an internal wave animation */
+  --loading-cursor-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 70 24' width='70' height='24'%3E%3Ccircle cx='6' cy='12' r='3.5' fill='black'%3E%3Canimate attributeName='opacity' values='0.3;1;0.3' dur='1.2s' repeatCount='indefinite' begin='0s'/%3E%3C/circle%3E%3Ccircle cx='16' cy='12' r='3.5' fill='black'%3E%3Canimate attributeName='opacity' values='0.3;1;0.3' dur='1.2s' repeatCount='indefinite' begin='0.1s'/%3E%3C/circle%3E%3Ccircle cx='26' cy='12' r='3.5' fill='black'%3E%3Canimate attributeName='opacity' values='0.3;1;0.3' dur='1.2s' repeatCount='indefinite' begin='0.2s'/%3E%3C/circle%3E%3Ccircle cx='44' cy='12' r='3.5' fill='black'%3E%3Canimate attributeName='opacity' values='0.3;1;0.3' dur='1.2s' repeatCount='indefinite' begin='0.3s'/%3E%3C/circle%3E%3Ccircle cx='54' cy='12' r='3.5' fill='black'%3E%3Canimate attributeName='opacity' values='0.3;1;0.3' dur='1.2s' repeatCount='indefinite' begin='0.4s'/%3E%3C/circle%3E%3Ccircle cx='64' cy='12' r='3.5' fill='black'%3E%3Canimate attributeName='opacity' values='0.3;1;0.3' dur='1.2s' repeatCount='indefinite' begin='0.5s'/%3E%3C/circle%3E%3C/svg%3E");
+}
+
+@keyframes sixDotsPulse {
+  0%, 100% { 
+    opacity: 0.8; 
+    filter: drop-shadow(0 0 2px hsla(var(--primary), 0.3)); 
+  }
+  50% { 
+    opacity: 1; 
+    filter: drop-shadow(0 0 6px hsla(var(--primary), 0.8)); 
+  }
+}
+
+/* 2. Slide-in and Fade-in animation for Tool Call / Step cards */
+[id^="step-"],
+[data-radix-collection-item] {
+  animation: stepSlideIn 0.3s ease-out forwards;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+@keyframes stepSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 3. Subtle pulse animation for active processing steps */
+.step-container[data-type="run"],
+[id^="step-"][data-type="run"] {
+  animation: processingPulse 2s ease-in-out infinite;
+}
+
+@keyframes processingPulse {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}

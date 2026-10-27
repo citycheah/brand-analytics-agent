@@ -1,0 +1,32 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "out_of_scope_recipe",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Can you give me a recipe for spaghetti carbonara?"}]
+      }
+    },
+    {
+      "eval_case_id": "localized_discovery_bmw",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Discover official handles and website domains for BMW in Germany."}]
+      }
+    },
+    {
+      "eval_case_id": "parameter_collection_prompt",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Analyze the advertising metrics for BMW and Mercedes-Benz."}]
+      }
+    },
+    {
+      "eval_case_id": "brand_analytics_germany_2026",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Compare the automotive brands BMW and Mercedes-Benz in Germany for the period 2026-01-01 to 2026-03-31."}]
+      }
+    }
+  ]
+}

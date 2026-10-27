@@ -1,0 +1,33 @@
+name: CI Verification Suite
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test-and-verify:
+    name: Run Pytest Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install project dependencies
+        run: |
+          uv sync --dev
+
+      - name: Run Pytest Suite (Unit + Integration)
+        run: |
+          uv run pytest tests/unit/ tests/integration/ -v

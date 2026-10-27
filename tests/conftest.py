@@ -9,6 +9,7 @@ os.environ.setdefault("OAUTH_GOOGLE_CLIENT_ID", "mock-client-id")
 os.environ.setdefault("OAUTH_GOOGLE_CLIENT_SECRET", "mock-client-secret")
 
 try:
+    import google.auth
     import google.auth.credentials
     import google.cloud.aiplatform as aiplatform
 
@@ -16,6 +17,15 @@ try:
         project="local-demo-project",
         credentials=google.auth.credentials.AnonymousCredentials(),
     )
+
+    # Provide fallback for google.auth.default() in headless CI runners without ADC credentials
+    try:
+        google.auth.default()
+    except Exception:
+        def _mock_default(*args, **kwargs):
+            return google.auth.credentials.AnonymousCredentials(), "local-demo-project"
+
+        google.auth.default = _mock_default
 except Exception:
     pass
 

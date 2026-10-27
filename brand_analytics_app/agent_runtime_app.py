@@ -194,7 +194,10 @@ class AgentEngineApp(AdkApp):
         else:
             os.environ["GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY"] = "False"
         setup_telemetry()
-        super().set_up()
+        try:
+            super().set_up()
+        except Exception as e:
+            logging.warning(f"super().set_up() encountered non-fatal error: {e}")
         if not use_vertex:
             os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
             # Invalidate any cached Vertex AI clients on models
@@ -269,8 +272,21 @@ try:
 except Exception:
     pass
 
+def build_instrumentor(project_id: str | None = None):
+    try:
+        import google.auth
+        credentials, _ = google.auth.default()
+        if credentials:
+            from vertexai.agent_engines.templates.adk import _default_instrumentor_builder
+            return _default_instrumentor_builder(project_id)
+    except Exception:
+        pass
+    return None
+
+
 agent_runtime = AgentEngineApp(
     app=adk_app,
     artifact_service_builder=build_artifact_service,
     session_service_builder=build_session_service,
+    instrumentor_builder=build_instrumentor,
 )

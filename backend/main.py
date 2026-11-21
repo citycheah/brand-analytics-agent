@@ -14,12 +14,25 @@
 import asyncio
 import json
 import logging
+import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from intel_core.schemas import OverrideFieldName, OverrideTargetType
 from pydantic import BaseModel, Field
 
 from brand_analytics_app.agent_runtime_app import agent_runtime
+from brand_analytics_app.tools.federated_intel import (
+    apply_creative_human_override,
+    get_creative_themes_and_fatigue,
+    get_portal_overview,
+    get_velocity_breakout_alerts_and_ops,
+    inspect_creative_evidence,
+    query_federated_sos_sov,
+    resolve_creative_media_bytes,
+    run_mmm_what_if_simulation,
+)
 
 # Initialize Logging
 logging.basicConfig(level=logging.INFO)
@@ -41,9 +54,38 @@ except Exception as e:
 
 app = FastAPI(
     title="Brand Analytics Agent API",
-    description="Backend API wrapper exposing ADK Agent as a streaming REST service.",
-    version="1.0.0",
+    description="Backend API wrapper exposing ADK Agent SSE & Federated Intelligence Portal REST endpoints.",
+    version="2.0.0",
 )
+
+_cors_raw = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+_cors_origins = [o.strip() for o in _cors_raw.split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+class OverrideRequest(BaseModel):
+    target_key_type: OverrideTargetType = "asset_id"
+    target_key_value: str
+    field_name: OverrideFieldName = "matched_brand_id"
+    human_value: str
+    reviewer: str = "analyst"
+    reason: str = ""
+    ai_value: str | None = None
+
+
+class MmmSimulateRequest(BaseModel):
+    brand_id: str = "BMW"
+    country: str = "Germany"
+    total_budget_usd: float | None = Field(default=None, gt=0.0)
+    proposed_spend_by_channel: dict[str, float] | None = None
+    optimize: bool = False
+    panel_type: str = "conversions"
 
 
 class StreamQueryRequest(BaseModel):
@@ -131,3 +173,100 @@ async def query_stream(request: StreamQueryRequest):
 async def health_check():
     """Liveness/readiness probe endpoint."""
     return {"status": "ok"}
+
+
+@app.get("/api/v1/media/{asset_id}")
+async def get_creative_media(asset_id: str):
+    """Serves local creative binary or deterministic preview card for an `asset_id`."""
+    try:
+        payload, media_type = resolve_creative_media_bytes(asset_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content=payload,
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+@app.post("/api/v1/overrides")
+async def create_human_override(request: OverrideRequest):
+    """Atomically writes a HITL creative override (`<50ms`), invalidates caches, and returns live view."""
+    return apply_creative_human_override(
+        target_key_type=request.target_key_type,
+        target_key_value=request.target_key_value,
+        field_name=request.field_name,
+        human_value=request.human_value,
+        reviewer=request.reviewer,
+        reason=request.reason,
+        ai_value=request.ai_value,
+    )
+
+
+@app.post("/api/v1/mmm/simulate")
+async def simulate_mmm_budget(request: MmmSimulateRequest):
+    """Runs pure-Python Hill diminishing-returns what-if simulation over pre-computed MMM curves."""
+    result = run_mmm_what_if_simulation(
+        brand_id=request.brand_id,
+        country=request.country,
+        total_budget_usd=request.total_budget_usd,
+        proposed_spend_by_channel=request.proposed_spend_by_channel,
+        optimize=request.optimize,
+        panel_type=request.panel_type,
+    )
+    if result.get("status") == "not_found":
+        raise HTTPException(status_code=404, detail=result.get("message", "MMM artifacts not found"))
+    return result
+
+
+@app.get("/api/v1/portal/overview")
+async def portal_overview():
+    """Returns executive KPIs across SOS/SOV, Themes, MMM, Velocity, Drift, and Audit Coverage."""
+    return get_portal_overview()
+
+
+@app.get("/api/v1/portal/themes")
+async def portal_themes(country: str = "Germany", brand_id: str | None = None):
+    """Returns SOS/SOV tables, HHI, Jaccard overlap, UMAP scatter coordinates, and fatigue flags."""
+    sos_sov = query_federated_sos_sov(country=country)
+    themes = get_creative_themes_and_fatigue(country=country, brand_id=brand_id)
+    return {"sos_sov": sos_sov, "themes_and_fatigue": themes}
+
+
+@app.get("/api/v1/portal/creatives")
+async def portal_creatives(
+    asset_id: str | None = None,
+    brand_id: str | None = None,
+    hook_type: str | None = None,
+    only_overridden: bool = False,
+    limit: int = 24,
+):
+    """Returns live DuckDB creative dissections overlaid with atomic HITL overrides."""
+    return inspect_creative_evidence(
+        asset_id=asset_id,
+        brand_id=brand_id,
+        hook_type=hook_type,
+        only_overridden=only_overridden,
+        limit=limit,
+    )
+
+
+@app.get("/api/v1/portal/mmm")
+async def portal_mmm(
+    brand_id: str = "BMW",
+    country: str = "Germany",
+    panel_type: str = "conversions",
+):
+    """Returns 3-tier MMM ladder diagnostics, 90% HDI ROAS intervals, Theme Attribution, and baseline curve state."""
+    return run_mmm_what_if_simulation(
+        brand_id=brand_id,
+        country=country,
+        optimize=False,
+        panel_type=panel_type,
+    )
+
+
+@app.get("/api/v1/portal/velocity")
+async def portal_velocity(top_k: int = 12, brand_id: str | None = None):
+    """Returns Velocity breakout alerts, PSI drift report, FinOps ledger, and Golden Vision Eval gates."""
+    return get_velocity_breakout_alerts_and_ops(top_k=top_k, brand_id=brand_id)

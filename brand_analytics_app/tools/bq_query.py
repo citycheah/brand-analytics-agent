@@ -32,6 +32,7 @@ except ImportError:
     bigquery = None  # type: ignore[assignment]
     storage = None  # type: ignore[assignment]
 import pandas as pd
+from intel_core.schemas import country_display_name, normalize_country_iso
 
 from brand_analytics_app import configs
 from brand_analytics_app.tools.data_loader import _get_query_template_path
@@ -64,17 +65,25 @@ async def execute_bq_query(
     Returns:
         Dict handle containing the GCS URI, row count, schema, and preview rows.
     """
-    # 0. Enforce date range check (table only contains data from 2025-01-01 onwards)
-    if start_date < "2025-01-01":
+    # 0. Enforce date range check (federated EU Auto lakehouse runs 2024-01-01 onwards)
+    min_date = configs.MIN_AVAILABLE_DATE
+    if start_date < min_date:
         raise ValueError(
-            "Data is only available from 2025-01-01 onwards. Please select a start date on or after 2025-01-01."
+            f"Data is only available from {min_date} onwards. Please select a start date on or after {min_date}."
         )
 
-    # 0.5. Enforce country/market whitelist validation
+    # 0.5. Enforce country/market whitelist validation (canonicalized via intel-core)
     for country in target_countries:
-        if country.lower().strip() not in SUPPORTED_COUNTRIES:
+        normalized_match = False
+        try:
+            iso = normalize_country_iso(country)
+            disp = country_display_name(iso).lower()
+            normalized_match = disp in SUPPORTED_COUNTRIES or iso.lower() in SUPPORTED_COUNTRIES
+        except ValueError:
+            normalized_match = False
+        if country.lower().strip() not in SUPPORTED_COUNTRIES and not normalized_match:
             raise ValueError(
-                f"Unsupported country/market: '{country}'. The database only contains competitive snapshot data for these 49 markets: {SUPPORTED_COUNTRIES_RAW.replace(';', ', ')}."
+                f"Unsupported country/market: '{country}'. The database only contains competitive snapshot data for these {len(SUPPORTED_COUNTRIES)} markets: {SUPPORTED_COUNTRIES_RAW.replace(';', ', ')}."
             )
 
     # 1. Enforce strict table name check
@@ -211,7 +220,16 @@ async def execute_bq_query(
                 shutil.rmtree(part_dir, ignore_errors=True)
             os.makedirs(part_dir, exist_ok=True)
 
-            df_country = df_mock[df_mock["country"].str.lower() == country.lower()].copy()
+            resolved_country = country
+            try:
+                if country:
+                    resolved_country = country_display_name(normalize_country_iso(country))
+            except ValueError:
+                resolved_country = country
+
+            df_country = df_mock[
+                df_mock["country"].str.lower().isin({country.lower(), resolved_country.lower()})
+            ].copy()
 
             def matches_kw(row_kw):
                 if not isinstance(row_kw, str):

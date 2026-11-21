@@ -42,6 +42,14 @@ from brand_analytics_app.tools.feasibility import (
     get_feasibility_defaults,
     get_feasibility_thresholds,
 )
+from brand_analytics_app.tools.federated_intel import (
+    apply_creative_human_override,
+    get_creative_themes_and_fatigue,
+    get_velocity_breakout_alerts_and_ops,
+    inspect_creative_evidence,
+    query_federated_sos_sov,
+    run_mmm_what_if_simulation,
+)
 from brand_analytics_app.tools.metrics import (
     _attribute_data_to_brands,
     _calculate_brand_totals,
@@ -87,6 +95,7 @@ __all__ = [
     "_load_verifications_from_uri",
     "_persist_and_summarize_verifications",
     "_resolve_creative_verifications",
+    "apply_creative_human_override",
     "calculate_brand_metrics",
     "calculate_report_metrics",
     "check_brand_feasibility",
@@ -95,9 +104,14 @@ __all__ = [
     "export_feasibility_report",
     "export_report",
     "generate_feasibility_report_html",
+    "get_creative_themes_and_fatigue",
     "get_feasibility_defaults",
     "get_feasibility_thresholds",
+    "get_velocity_breakout_alerts_and_ops",
+    "inspect_creative_evidence",
     "logger",
+    "query_federated_sos_sov",
+    "run_mmm_what_if_simulation",
     "sandboxed_python_interpreter",
     "types",
     "validate_and_sanitize_keywords",

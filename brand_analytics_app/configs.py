@@ -13,10 +13,15 @@
 # limitations under the License.
 
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
+from intel_core.schemas import supported_country_names
 
 load_dotenv()
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_WORKSPACE_ROOT = _REPO_ROOT.parent
 
 # Force GOOGLE_CLOUD_LOCATION to global to ensure gemini resolves correctly without regional 404 errors
 os.environ["GOOGLE_CLOUD_LOCATION"] = "global"
@@ -64,23 +69,17 @@ def __getattr__(name: str):
             return 200000000000
 
     elif name in ("SUPPORTED_COUNTRIES_RAW", "SUPPORTED_COUNTRIES"):
-        _raw_env = os.environ.get(
-            "SUPPORTED_COUNTRIES",
-            "Argentina;Australia;Austria;Belgium;Brazil;Canada;Chile;Colombia;Czech Republic;"
-            "Denmark;Egypt;Finland;France;Germany;Greece;Hong Kong;Hungary;India;Indonesia;"
-            "Ireland;Israel;Italy;Japan;Korea, Republic of;Kuwait;Lithuania;Malaysia;Mexico;"
-            "Netherlands;New Zealand;Norway;Philippines;Poland;Portugal;Qatar;Romania;"
-            "Saudi Arabia;Singapore;South Africa;Spain;Sweden;Switzerlands;"
-            "Taiwan, Province of China;Thailand;Turkey;United Arab Emirates;United Kingdom;"
-            "United States;Vietnam",
-        )
+        _default_raw = ";".join(supported_country_names())
+        _raw_env = os.environ.get("SUPPORTED_COUNTRIES", _default_raw)
         _countries_list = [
             c.strip() for c in _raw_env.replace("\n", "").split(";") if c.strip()
         ]
         if name == "SUPPORTED_COUNTRIES_RAW":
             return ";".join(_countries_list)
         else:
-            return {c.lower() for c in _countries_list}
+            # Support canonical names and ISO-2 codes (DE, FR, GB, ...) uniformly via registry
+            lowered = {c.lower() for c in _countries_list}
+            return lowered
 
     elif name == "FEASIBILITY_THRESHOLDS_JSON":
         return os.environ.get("FEASIBILITY_THRESHOLDS_JSON")
@@ -117,5 +116,27 @@ def __getattr__(name: str):
 
     elif name == "GEMINI_MODEL_NAME":
         return os.environ.get("GEMINI_MODEL_NAME", "gemini-2.5-flash")
+
+    elif name == "INTEL_LAKEHOUSE_DIR":
+        if os.environ.get("INTEL_LAKEHOUSE_DIR"):
+            return os.environ["INTEL_LAKEHOUSE_DIR"]
+        sibling = _WORKSPACE_ROOT / "data" / "eu_auto_lakehouse"
+        if sibling.exists():
+            return str(sibling)
+        return str(_REPO_ROOT / "data" / "eu_auto_lakehouse")
+
+    elif name == "VELOCITY_GOLD_DIR":
+        if os.environ.get("VELOCITY_GOLD_DIR"):
+            return os.environ["VELOCITY_GOLD_DIR"]
+        lakehouse_vel = Path(os.environ.get("INTEL_LAKEHOUSE_DIR", str(_WORKSPACE_ROOT / "data" / "eu_auto_lakehouse"))) / "gold" / "velocity_artifacts"
+        if lakehouse_vel.exists():
+            return str(lakehouse_vel)
+        sibling_vel = _WORKSPACE_ROOT / "competitive-velocity-ml-engine" / "data" / "gold_velocity"
+        if sibling_vel.exists():
+            return str(sibling_vel)
+        return str(_REPO_ROOT / "data" / "gold_velocity")
+
+    elif name == "MIN_AVAILABLE_DATE":
+        return os.environ.get("MIN_AVAILABLE_DATE", "2024-01-01")
 
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

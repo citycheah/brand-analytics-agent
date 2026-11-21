@@ -1,0 +1,28 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "federated_sos_sov_de",
+      "prompt": "What is BMW and Mercedes-Benz Share of Spend and audit coverage in Germany?",
+      "expected_tool_calls": ["query_federated_sos_sov"],
+      "expected_args": {"country": "Germany"}
+    },
+    {
+      "eval_case_id": "creative_themes_and_fatigue",
+      "prompt": "Show creative theme concentration HHI and fatigued ads in Germany.",
+      "expected_tool_calls": ["get_creative_themes_and_fatigue"],
+      "expected_args": {"country": "Germany"}
+    },
+    {
+      "eval_case_id": "mmm_what_if_simulation",
+      "prompt": "Simulate optimizing BMW Germany weekly budget to $75,000 USD across paid channels.",
+      "expected_tool_calls": ["run_mmm_what_if_simulation"],
+      "expected_args": {"brand_id": "BMW", "country": "Germany", "total_budget_usd": 75000.0, "optimize": true}
+    },
+    {
+      "eval_case_id": "velocity_breakout_ops",
+      "prompt": "Check YouTube breakout alerts, PSI drift status, and Golden Vision Eval gate.",
+      "expected_tool_calls": ["get_velocity_breakout_alerts_and_ops"],
+      "expected_args": {"top_k": 5}
+    }
+  ]
+}

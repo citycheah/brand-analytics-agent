@@ -57,13 +57,19 @@ from brand_analytics_app.app_utils.telemetry import (
     before_tool_log,
 )
 from brand_analytics_app.tools import (
+    apply_creative_human_override,
     calculate_brand_metrics,
     calculate_report_metrics,
     check_brand_feasibility,
     execute_bq_query,
     export_feasibility_report,
     export_report,
+    get_creative_themes_and_fatigue,
     get_feasibility_thresholds,
+    get_velocity_breakout_alerts_and_ops,
+    inspect_creative_evidence,
+    query_federated_sos_sov,
+    run_mmm_what_if_simulation,
     sandboxed_python_interpreter,
     validate_and_sanitize_keywords,
     verify_creatives_multimodal,
@@ -83,7 +89,6 @@ class ValidatedFinderAgentTool(AgentTool):
 
         brands = args.get("brands", [])
         raw_country = args.get("country", "")
-        markets = [m.strip() for m in raw_country.split(",")] if raw_country else [""]
 
         # Phase 1: Manual concurrent search orchestration
         all_brand_contexts = {}
@@ -457,7 +462,7 @@ data_analyst_agent = LlmAgent(
        - brands (a list of brand names)
        - country (a target country name, or a comma-separated list of multiple countries)
        - date range (start date and end date). Resolve friendly ranges (e.g. "Q1 2026", "Jan to Mar 2026") to ISO YYYY-MM-DD format (start_date: 2026-01-01, end_date: 2026-03-31).
-       CRITICAL: Date Range Guardrail: The underlying database only has data from 2025-01-01 onwards. If the user specifies a date range that starts or includes any time before 2025-01-01 (e.g., year 2024, or Q4 2024), you MUST stop, inform the user that database data is only available from 2025-01-01 onwards, and ask them to select a new date range on or after 2025-01-01. Do NOT proceed to run any tools or queries until the date range is corrected.
+       CRITICAL: Date Range Guardrail: The federated lakehouse has data from 2024-01-01 onwards. If the user specifies a date range that starts or includes any time before 2024-01-01, you MUST stop, inform the user that database data is only available from 2024-01-01 onwards, and ask them to select a new date range on or after 2024-01-01. Do NOT proceed to run any tools or queries until the date range is corrected.
        CRITICAL: Country / Market Guardrail: The database ONLY contains snapshot data for the following 49 supported countries/markets: [SUPPORTED_COUNTRIES_LIST]. If the user specifies a target country that is not in this list, you MUST stop, inform the user that the country is not supported, list some of the supported countries, and ask them to select a valid country from the whitelist before proceeding. Do NOT proceed to run any tools or queries until the country is corrected.
        CRITICAL: Typo Detection: Always evaluate the requested brand names for obvious typos (e.g., "Marcedes" instead of "Mercedes", or "BWM" instead of "BMW"). If you suspect a typo, you MUST stop and politely ask the user to confirm the correct spelling before proceeding with any searches or queries.
        CRITICAL: Do NOT prompt for customized feasibility thresholds at the beginning unless the user brings up feasibility/custom thresholds during this gathering phase.
@@ -551,6 +556,13 @@ data_analyst_agent = LlmAgent(
          1. Key Insight: 1-5 bullet points summarizing the most important findings.
          2. Data Table: A Markdown table presenting the data obtained from the tool.
          3. Strategic Insights: A strictly strategic summary (DO NOT mention any numbers in this section).
+    6. FEDERATED INTELLIGENCE LAKEHOUSE & EXECUTIVE ANALYTICS:
+       - `query_federated_sos_sov`: Query EU Auto Gold monthly SOS/SOV and live DuckDB HITL audit coverage (`audit_coverage_pct`) from the Hive/Parquet lakehouse.
+       - `get_creative_themes_and_fatigue`: Inspect HHI category concentration, Jaccard brand overlap, Battleground vs Whitespace creative themes, UMAP coordinates, and creative wearout/fatigue flags.
+       - `inspect_creative_evidence`: Retrieve creative cards & Vision v2 metrics (`hook_type`, `cta_clarity_score`, `time_to_brand_sec`) from the live DuckDB view (`vw_live_creative_dissection`) reflecting human overrides immediately.
+       - `apply_creative_human_override`: Persist an atomic human-in-the-loop correction (`matched_brand_id`, `theme_label`, or `ad_category`) by `asset_id`, `media_hash_key`, or `theme_label` and invalidate cached reports immediately.
+       - `run_mmm_what_if_simulation`: Simulate weekly budget reallocations over pre-computed Bayesian MMM Hill curves, report 90% HDI ROAS intervals & Theme Attribution, and ALWAYS surface `is_proxy_outcome` / `roas_claim_blocked` / `is_spend_modeled` disclaimers whenever true.
+       - `get_velocity_breakout_alerts_and_ops`: Inspect YouTube Velocity breakout alerts, PSI drift diagnostics, FinOps Gemini spend ledger, and Golden Vision Eval status.
     """.replace(
         "[SUPPORTED_COUNTRIES_LIST]", SUPPORTED_COUNTRIES_RAW.replace(";", ", ")
     ),
@@ -565,6 +577,12 @@ data_analyst_agent = LlmAgent(
         get_feasibility_thresholds,
         calculate_report_metrics,
         export_feasibility_report,
+        query_federated_sos_sov,
+        get_creative_themes_and_fatigue,
+        inspect_creative_evidence,
+        apply_creative_human_override,
+        run_mmm_what_if_simulation,
+        get_velocity_breakout_alerts_and_ops,
     ],
     before_model_callback=before_model_log,
     after_model_callback=after_model_log,

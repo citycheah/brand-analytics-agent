@@ -13,7 +13,6 @@
 # limitations under the License.
 import logging
 import os
-import pickle
 from typing import Any
 
 import vertexai
@@ -61,22 +60,22 @@ class GcsSessionService(InMemorySessionService):
 
     def _get_gcs_blob(self, session_id: str):
         if self.bucket_name:
-            return self.bucket.blob(f"adk_sessions/{session_id}.pkl")
+            return self.bucket.blob(f"adk_sessions/{session_id}.json")
         return None
 
     def _save_session(self, session: Session) -> None:
-        data = pickle.dumps(session)
+        payload = session.model_dump_json(indent=2)
         blob = self._get_gcs_blob(session.id)
         if blob:
             try:
-                blob.upload_from_string(data, content_type="application/octet-stream")
+                blob.upload_from_string(payload, content_type="application/json")
             except Exception as e:
                 logging.error(f"[-] Failed to upload session {session.id} to GCS: {e}")
         else:
-            filepath = os.path.join(self.local_dir, f"{session.id}.pkl")
+            filepath = os.path.join(self.local_dir, f"{session.id}.json")
             try:
-                with open(filepath, "wb") as f:
-                    f.write(data)
+                with open(filepath, "w", encoding="utf-8") as f:
+                    f.write(payload)
             except Exception as e:
                 logging.error(f"[-] Failed to save session {session.id} locally: {e}")
 
@@ -85,18 +84,18 @@ class GcsSessionService(InMemorySessionService):
         if blob:
             try:
                 if blob.exists():
-                    data = blob.download_as_bytes()
-                    return pickle.loads(data)
+                    data = blob.download_as_text(encoding="utf-8")
+                    return Session.model_validate_json(data)
             except Exception as e:
                 logging.error(
                     f"[-] Failed to download session {session_id} from GCS: {e}"
                 )
         else:
-            filepath = os.path.join(self.local_dir, f"{session_id}.pkl")
+            filepath = os.path.join(self.local_dir, f"{session_id}.json")
             if os.path.exists(filepath):
                 try:
-                    with open(filepath, "rb") as f:
-                        return pickle.loads(f.read())
+                    with open(filepath, encoding="utf-8") as f:
+                        return Session.model_validate_json(f.read())
                 except Exception as e:
                     logging.error(
                         f"[-] Failed to load session {session_id} locally: {e}"
@@ -174,7 +173,7 @@ class GcsSessionService(InMemorySessionService):
                     f"[-] Failed to delete session {session_id} from GCS: {e}"
                 )
         else:
-            filepath = os.path.join(self.local_dir, f"{session_id}.pkl")
+            filepath = os.path.join(self.local_dir, f"{session_id}.json")
             if os.path.exists(filepath):
                 try:
                     os.remove(filepath)
@@ -277,7 +276,9 @@ def build_instrumentor(project_id: str | None = None):
         import google.auth
         credentials, _ = google.auth.default()
         if credentials:
-            from vertexai.agent_engines.templates.adk import _default_instrumentor_builder
+            from vertexai.agent_engines.templates.adk import (
+                _default_instrumentor_builder,
+            )
             return _default_instrumentor_builder(project_id)
     except Exception:
         pass

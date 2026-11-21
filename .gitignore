@@ -19,7 +19,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/
@@ -153,6 +153,9 @@ tmp*
 **/node_modules
 **/.next/
 **/out/
+**/.test-dist/
+!frontend-portal/lib/
+!frontend-portal/lib/**
 *.tsbuildinfo
 next-env.d.ts
 npm-debug.log

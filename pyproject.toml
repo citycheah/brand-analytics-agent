@@ -30,7 +30,7 @@ dependencies = [
 requires-python = ">=3.11,<3.13"
 
 [tool.uv.sources]
-intel-core = { path = "../intel-core", editable = true }
+intel-core = { git = "https://github.com/citycheah/intel-core.git", tag = "v0.1.0" }
 
 
 [dependency-groups]

@@ -3,17 +3,18 @@
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Google ADK](https://img.shields.io/badge/Agent_Framework-Google_ADK-4285F4?logo=google&logoColor=white)](https://google.github.io/adk-docs/)
 [![Gemini 2.5](https://img.shields.io/badge/Multimodal_AI-Gemini_2.5_Pro_%26_Flash-8E75B2?logo=googlegemini&logoColor=white)](https://deepmind.google/technologies/gemini/)
-[![Execution Modes](https://img.shields.io/badge/Data_Backend-Local_Parquet_%7C_BigQuery-00A86B)](#dual-backend-execution-local-vs-bigquery)
-[![Tests](https://img.shields.io/badge/Tests-70%2F70_Passing-brightgreen)](#7-verification--testing)
+[![Next.js 15 Portal](https://img.shields.io/badge/Portal-Next.js_15_%2B_Recharts-000000?logo=nextdotjs&logoColor=white)](./frontend-portal)
+[![Federated: intel-core](https://img.shields.io/badge/Federated-intel--core_v0.1.0-purple)](https://github.com/citycheah/intel-core)
+[![Execution Modes](https://img.shields.io/badge/Data_Backend-Local_Parquet_%7C_BigQuery-00A86B)](#31-dual-backend-execution-data_backendlocal--bigquery)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
-An enterprise-grade, multi-agent conversational marketing intelligence platform built with **Google Agent Development Kit (ADK)**, **Gemini 2.5 Pro & Flash**, **FastAPI**, **Chainlit**, **BigQuery / PyArrow Parquet**, and **Plotly**.
+An enterprise-grade, multi-agent marketing intelligence, MMM simulation, and creative verification platform built with **Google Agent Development Kit (ADK)**, **Gemini 2.5 Pro & Flash**, **`intel-core`**, **FastAPI**, **Next.js 15 / React / TypeScript**, **DuckDB / BigQuery / PyArrow Parquet**, and **Plotly**.
 
 This system automates the end-to-end competitive advertising intelligence workflow across **49 global markets**:
 1. **Iterative Brand Identity & Handle Discovery** via grounded web search with programmatic disjoint-keyword validation.
 2. **Parameterized Multi-Market SQL Extraction** over digital advertising occurrence datasets with incremental partitioned caching and hash-based deduplication.
 3. **Multimodal Vision Creative Verification** using **Gemini 2.5 Flash** with domain pre-filtering, video/image batch splitting, and **mathematical early stopping** to eliminate redundant LLM calls.
-4. **Deterministic Executive HTML Report Generation** combining narrative synthesis with pre-rendered interactive **Plotly** dashboards and an AST-validated, credential-stripped Python sandbox.
+4. **Federated Lakehouse Portal & HITL Governance** serving a 5-page **Next.js 15 Executive Portal** (`/`, `/themes`, `/creatives`, `/mmm`, `/velocity`) over FastAPI REST + `/query/stream` SSE with sub-50ms atomic DuckDB HITL overrides (`dim_human_override`), pure-Python Hill MMM budget optimization (`intel-core`), YouTube velocity drift monitoring, and deterministic Plotly HTML report exports.
 
 ---
 
@@ -45,10 +46,10 @@ This repository demonstrates how to solve these production challenges using **hi
 
 ```mermaid
 flowchart TB
-    subgraph Frontend["Presentation & Persistence Layer (Chainlit + FastAPI)"]
-        UI["Chainlit Conversational UI<br/>(OAuth Domain Guard + Custom CSS)"]
-        DataLayer["SafeSQLAlchemyDataLayer<br/>(Async SQLite + Debounced GCS Sync)"]
-        SSE["FastAPI /chat_stream Endpoint<br/>(15s SSE Keep-Alive Heartbeats)"]
+    subgraph Frontend["Presentation Layer (Next.js 15 Portal + FastAPI REST/SSE)"]
+        UI["Next.js 15 Portal (`frontend-portal/`)<br/>/, /themes, /creatives, /mmm, /velocity"]
+        PortalAPI["FastAPI REST Endpoints (/api/v1/portal/*,<br/>/api/v1/overrides, /api/v1/mmm/simulate, /api/v1/media/*)"]
+        SSE["FastAPI /query/stream SSE Endpoint<br/>(15s Heartbeats + Single-Flight Guard)"]
     end
 
     subgraph Orchestration["Multi-Agent Orchestration Layer (Google ADK)"]
@@ -59,21 +60,23 @@ flowchart TB
         ReportSub["ReportingAgent<br/>(Executive HTML Narrative Composer)"]
     end
 
-    subgraph Tools["Deterministic Analytics & Multimodal Verification Tools"]
+    subgraph Tools["Deterministic Analytics, Lakehouse & Multimodal Verification Tools"]
         BQTool["execute_bq_query<br/>(Regex SQL / Local Parquet Adapter)"]
         VerifyTool["verify_creatives_multimodal<br/>(Gemini 2.5 Flash Vision + Early Stopping)"]
+        FedTool["federated_intel Tools<br/>(SOS/SOV, Themes, HITL Overrides, Hill MMM, Velocity)"]
         MetricsTool["calculate_brand_metrics & check_brand_feasibility<br/>(Co-Mention 1/K Attribution + Ceiling Month Scaling)"]
         SandboxTool["run_custom_python_analysis<br/>(AST-Validated, Credential-Stripped Subprocess)"]
     end
 
-    subgraph Storage["Dual-Mode Data & Artifact Storage"]
-        LocalStore["Local Mode (DATA_BACKEND=local)<br/>data/synthetic_ad_occurrences.parquet<br/>+ .local_storage/ Partitions"]
+    subgraph Storage["Dual-Mode Data & Federated Lakehouse Storage"]
+        LocalStore["Local Mode (DATA_BACKEND=local)<br/>EU Auto Lakehouse + DuckDB HITL + synthetic_ad_occurrences.parquet"]
         CloudStore["Enterprise Mode (DATA_BACKEND=bigquery)<br/>BigQuery Snapshot + GCS Partitioned Extracts"]
     end
 
+    UI <--> PortalAPI
     UI <--> SSE
-    UI --> DataLayer
     SSE <--> RootAgent
+    PortalAPI <--> FedTool
 
     RootAgent -->|"1. Discover & Validate Handles"| FinderTool
     FinderTool <--> SearchSub
@@ -82,8 +85,10 @@ flowchart TB
     BQTool <--> CloudStore
     RootAgent -->|"3. Multimodal Vision Audit"| VerifyTool
     RootAgent -->|"4. Compute SOS / SOV / Feasibility"| MetricsTool
-    RootAgent -->|"5. Ad-Hoc Pandas Queries"| SandboxTool
-    RootAgent -->|"6. Render Interactive HTML"| ReportTool
+    RootAgent -->|"5. Lakehouse / HITL / MMM / Velocity"| FedTool
+    FedTool <--> LocalStore
+    RootAgent -->|"6. Ad-Hoc Pandas Queries"| SandboxTool
+    RootAgent -->|"7. Render Interactive HTML"| ReportTool
     ReportTool <--> ReportSub
 ```
 
@@ -179,14 +184,21 @@ brand-analytics-agent/
 │       ├── data_loader.py            # Partitioned Parquet loader, hash deduplicator, verification URI persistence
 │       ├── export.py                 # Deterministic Plotly token injector & market-specific HTML exporter
 │       ├── feasibility.py            # Date-scaled feasibility checker (raw & verified creative filtering)
+│       ├── federated_intel.py        # Federated lakehouse queries, HITL overrides, MMM simulator & velocity tools
 │       ├── metrics.py                # 1/K co-mention Share of Spend (SOS) & Share of Voice (SOV) calculator
 │       ├── report_metrics.py         # Pre-renderer for Plotly charts & comprehensive report breakdowns
 │       └── utils.py                  # Country whitelist validator, disjoint keyword checker, scale factor math
 ├── backend/
 │   ├── Dockerfile                    # Cloud Run production container for FastAPI backend
-│   └── main.py                       # FastAPI server (/chat_stream with 15s SSE heartbeats, /reports static mount)
-├── frontend/
-│   ├── Dockerfile                    # Cloud Run production container for Chainlit UI
+│   └── main.py                       # FastAPI server (/query/stream SSE + /api/v1/* Portal REST + /healthz)
+├── frontend-portal/                  # Unified 5-page Next.js 15 Executive Portal (Tailwind v4 + Recharts)
+│   ├── Dockerfile                    # Production container for Next.js Portal
+│   ├── app/                          # /, /themes, /creatives, /mmm, /velocity
+│   ├── components/                   # LayoutShell, OverrideDrawer
+│   ├── context/                      # SSR-safe PortalContext & SSE stream reader
+│   └── lib/                          # Typed FastAPI wire adapters, MMM math, CSV helpers & unit tests
+├── frontend/                         # Legacy Chainlit UI (optional via `--extra legacy-ui`)
+│   ├── Dockerfile                    # Legacy Cloud Run container for Chainlit UI
 │   ├── app.py                        # Chainlit conversational UI, OAuth domain guard, live step streaming
 │   └── safe_data_layer.py            # Resilient SQLAlchemy SQLite data layer with debounced GCS backup
 ├── data/
@@ -198,10 +210,10 @@ brand-analytics-agent/
 ├── deployment/
 │   └── terraform/                    # Terraform IaC for Cloud Run, IAM, Artifact Registry, and Telemetry
 ├── tests/
-│   ├── unit/                         # 67 unit tests covering tools, early stopping, local backend, UI & SSE
-│   └── integration/                  # 3 integration tests covering in-memory runner & streaming
+│   ├── unit/                         # Unit tests covering tools, federated Portal API, HITL overrides, SSE
+│   └── integration/                  # Integration tests covering in-memory ADK runner & streaming
 ├── .github/
-│   └── workflows/ci.yml              # Automated GitHub Actions test verification suite
+│   └── workflows/ci.yml              # GitHub Actions CI (ruff, pytest, Next.js typecheck/test/build)
 ├── .env.example                      # Sanitized environment configuration template (defaults to local mode)
 ├── LICENSE                           # Apache License 2.0
 └── pyproject.toml                    # Dependencies, pytest, ruff, and type checking configuration
@@ -231,15 +243,17 @@ Run the analytics tools, synthetic dataset generator, and full unit test suite l
    uv run python scripts/generate_synthetic_ad_data.py
    ```
 
-4. **Launch the FastAPI Backend + Chainlit UI:**
+4. **Launch the FastAPI Backend + Next.js 15 Portal:**
    ```bash
-   # Terminal 1: Start the FastAPI ADK Backend
-   uv run uvicorn backend.main:app --host 127.0.0.1 --port 8080
+   # Terminal 1: Start the FastAPI ADK & Portal Backend
+   uv run uvicorn backend.main:app --host 127.0.0.1 --port 8000
 
-   # Terminal 2: Start the Chainlit Conversational UI
-   uv run chainlit run frontend/app.py --port 8000
+   # Terminal 2: Start the Next.js 15 Executive Portal
+   npm --prefix frontend-portal install
+   npm --prefix frontend-portal run dev
    ```
-   Open **[http://localhost:8000](http://localhost:8000)** and try:
+   Open **[http://localhost:3000](http://localhost:3000)** (pages: `/`, `/themes`, `/creatives`, `/mmm`, `/velocity`). *(Optional legacy Chainlit UI: install `--extra legacy-ui` and run `uv run chainlit run frontend/app.py --port 8080`.)*
+   Try asking the Copilot:
    > *"Compare automotive brands BMW, Mercedes-Benz, and Audi in Germany and United Kingdom for 2026-01-01 to 2026-03-31, check their campaign feasibility, and export a Comprehensive Competitive report."*
 
 ---
@@ -268,10 +282,14 @@ For production deployment connected to live BigQuery advertising occurrence snap
 
 ## 7. Verification & Testing
 
-The repository includes **70 passing automated tests** (67 unit tests + 3 integration tests) verifying country whitelist guardrails, disjoint keyword validation, co-mention fractional attribution, ceiling-month feasibility scaling, multimodal early stopping (sufficiency, domain pre-filter, impossibility, and max-cap slicing), market-titled HTML report exports, SSE streaming multiplexing, and the local Parquet backend adapter.
+The repository includes **63 passing Python automated tests** (60 unit + 3 integration) and **17 TypeScript unit tests** for the Next.js Portal (`frontend-portal`), verifying country whitelist guardrails, disjoint keyword validation, co-mention fractional attribution, ceiling-month feasibility scaling, multimodal early stopping, federated lakehouse queries, atomic `<50ms` DuckDB HITL overrides, Hill MMM optimization, velocity drift exports, SSE streaming multiplexing, and Portal API wire adapters.
 
 ```bash
+uv run ruff check brand_analytics_app backend frontend tests
 uv run pytest tests/unit/ tests/integration/ -v
+npm --prefix frontend-portal run typecheck
+npm --prefix frontend-portal run test
+npm --prefix frontend-portal run build
 ```
 
 ---

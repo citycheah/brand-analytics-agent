@@ -1,0 +1,43 @@
+{
+  "brand_id": "Porsche",
+  "country_iso": "DE",
+  "outcome_metric_name": "conversions",
+  "is_proxy_outcome": false,
+  "is_spend_modeled": false,
+  "roas_claim_blocked": false,
+  "roi_label": "incremental_roas",
+  "excluded_interpolated_rows": 0,
+  "champion_tier": "tier3_bayesian_pymc_nutpie",
+  "ladder_comparison": [
+    {
+      "tier": "tier1_spend_proportional",
+      "rmse": 54.2238,
+      "mape_pct": 9.2069,
+      "r2": 0.4045,
+      "method": "proportional_spend_allocation"
+    },
+    {
+      "tier": "tier2_ridge_adstock_hill",
+      "rmse": 21.5935,
+      "mape_pct": 3.1298,
+      "r2": 0.9056,
+      "optimizer_success": true,
+      "alpha": 2.0
+    },
+    {
+      "tier": "tier3_bayesian_pymc_nutpie",
+      "rmse": 6.5035,
+      "mape_pct": 0.999,
+      "r2": 0.9914,
+      "sampler": "nutpie",
+      "chains": 2,
+      "draws": 100,
+      "tune": 100,
+      "max_rhat": 1.2569,
+      "min_ess": 6.5,
+      "divergences": 8,
+      "excluded_interpolated_rows": 0,
+      "convergence_passed": false
+    }
+  ]
+}

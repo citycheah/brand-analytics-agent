@@ -219,6 +219,13 @@ artifacts/
 scratch/
 data/*.parquet
 !data/synthetic_ad_occurrences.parquet
+!data/eu_auto_lakehouse/
+!data/eu_auto_lakehouse/**
+data/eu_auto_lakehouse/overrides/*.json
+!data/eu_auto_lakehouse/overrides/.gitkeep
+!docs/
+!docs/screenshots/
+!docs/screenshots/*.png
 
 # Chainlit data layer (SQLite) and local files
 .chainlit/data.db

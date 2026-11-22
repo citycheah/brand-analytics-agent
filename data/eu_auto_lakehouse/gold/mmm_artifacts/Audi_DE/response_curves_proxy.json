@@ -1,0 +1,116 @@
+{
+  "brand_id": "Audi",
+  "country_iso": "DE",
+  "outcome_metric_name": "google_trends_index",
+  "outcome_source": "google_trends_proxy",
+  "is_proxy_outcome": true,
+  "is_spend_modeled": false,
+  "roas_claim_blocked": true,
+  "roi_label": "proxy_index_only",
+  "disclaimer": "Outcome is `google_trends_index` (search interest proxy). Financial ROAS claims are blocked; report directional elasticity and relative index lift only.",
+  "champion_tier": "tier3_bayesian_pymc_nutpie",
+  "channels": {
+    "own_spend_meta_usd": {
+      "baseline_weekly_spend_usd": 18155.35,
+      "beta": 36.1977,
+      "ec50_usd": 21533.21,
+      "slope": 1.1881,
+      "adstock_lambda": 0.2506,
+      "total_spend_usd": 2832234.31,
+      "total_contribution": 2696.52,
+      "roas_mean": 0.9521,
+      "roas_sd": 0.4287,
+      "roas_hdi_90": [
+        0.3517,
+        1.4115
+      ]
+    },
+    "own_spend_youtube_usd": {
+      "baseline_weekly_spend_usd": 22997.34,
+      "beta": 51.4539,
+      "ec50_usd": 59160.06,
+      "slope": 1.5905,
+      "adstock_lambda": 0.5557,
+      "total_spend_usd": 3587584.54,
+      "total_contribution": 1550.67,
+      "roas_mean": 0.4322,
+      "roas_sd": 0.15,
+      "roas_hdi_90": [
+        0.2246,
+        0.6174
+      ]
+    },
+    "own_spend_tiktok_usd": {
+      "baseline_weekly_spend_usd": 10066.12,
+      "beta": 21.9038,
+      "ec50_usd": 17125.54,
+      "slope": 1.2734,
+      "adstock_lambda": 0.2407,
+      "total_spend_usd": 1570314.16,
+      "total_contribution": 1300.28,
+      "roas_mean": 0.828,
+      "roas_sd": 0.5406,
+      "roas_hdi_90": [
+        0.2039,
+        1.5172
+      ]
+    },
+    "own_spend_display_usd": {
+      "baseline_weekly_spend_usd": 11821.1,
+      "beta": 15.8384,
+      "ec50_usd": 14333.87,
+      "slope": 1.2328,
+      "adstock_lambda": 0.3957,
+      "total_spend_usd": 1844091.53,
+      "total_contribution": 1293.82,
+      "roas_mean": 0.7016,
+      "roas_sd": 0.5649,
+      "roas_hdi_90": [
+        0.0643,
+        1.5497
+      ]
+    }
+  },
+  "theme_attribution": [
+    {
+      "theme_label": "0% APR Flexible Lease Offer",
+      "total_spend_usd": 2581582.41,
+      "spend_share_pct": 26.25,
+      "incremental_per_1k_usd": 0.2733,
+      "estimated_contribution": 705.66,
+      "contribution_share_pct": 47.85
+    },
+    {
+      "theme_label": "Audi Motorsport & Track Heritage",
+      "total_spend_usd": 1559060.43,
+      "spend_share_pct": 15.85,
+      "incremental_per_1k_usd": 0.1778,
+      "estimated_contribution": 277.16,
+      "contribution_share_pct": 18.8
+    },
+    {
+      "theme_label": "Autonomous & ADAS Safety Tech",
+      "total_spend_usd": 1978476.67,
+      "spend_share_pct": 20.12,
+      "incremental_per_1k_usd": 0.1062,
+      "estimated_contribution": 210.09,
+      "contribution_share_pct": 14.25
+    },
+    {
+      "theme_label": "EV Range & Charging Infrastructure",
+      "total_spend_usd": 2560132.83,
+      "spend_share_pct": 26.03,
+      "incremental_per_1k_usd": 0.0742,
+      "estimated_contribution": 190.01,
+      "contribution_share_pct": 12.89
+    },
+    {
+      "theme_label": "Audi Bespoke Cabin Craftsmanship",
+      "total_spend_usd": 1154972.19,
+      "spend_share_pct": 11.74,
+      "incremental_per_1k_usd": 0.0794,
+      "estimated_contribution": 91.69,
+      "contribution_share_pct": 6.22
+    }
+  ]
+}

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -128,7 +129,7 @@ def __getattr__(name: str):
     elif name == "VELOCITY_GOLD_DIR":
         if os.environ.get("VELOCITY_GOLD_DIR"):
             return os.environ["VELOCITY_GOLD_DIR"]
-        lakehouse_vel = Path(os.environ.get("INTEL_LAKEHOUSE_DIR", str(_WORKSPACE_ROOT / "data" / "eu_auto_lakehouse"))) / "gold" / "velocity_artifacts"
+        lakehouse_vel = Path(sys.modules[__name__].INTEL_LAKEHOUSE_DIR) / "gold" / "velocity_artifacts"
         if lakehouse_vel.exists():
             return str(lakehouse_vel)
         sibling_vel = _WORKSPACE_ROOT / "competitive-velocity-ml-engine" / "data" / "gold_velocity"

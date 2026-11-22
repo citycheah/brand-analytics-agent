@@ -1,0 +1,43 @@
+{
+  "brand_id": "BMW",
+  "country_iso": "DE",
+  "outcome_metric_name": "conversions",
+  "is_proxy_outcome": false,
+  "is_spend_modeled": false,
+  "roas_claim_blocked": false,
+  "roi_label": "incremental_roas",
+  "excluded_interpolated_rows": 0,
+  "champion_tier": "tier3_bayesian_pymc_nutpie",
+  "ladder_comparison": [
+    {
+      "tier": "tier1_spend_proportional",
+      "rmse": 56.3634,
+      "mape_pct": 6.1964,
+      "r2": 0.4317,
+      "method": "proportional_spend_allocation"
+    },
+    {
+      "tier": "tier2_ridge_adstock_hill",
+      "rmse": 27.1132,
+      "mape_pct": 2.8125,
+      "r2": 0.8685,
+      "optimizer_success": true,
+      "alpha": 2.0
+    },
+    {
+      "tier": "tier3_bayesian_pymc_nutpie",
+      "rmse": 8.8206,
+      "mape_pct": 0.8972,
+      "r2": 0.9861,
+      "sampler": "nutpie",
+      "chains": 2,
+      "draws": 100,
+      "tune": 100,
+      "max_rhat": 1.2653,
+      "min_ess": 6.2,
+      "divergences": 0,
+      "excluded_interpolated_rows": 0,
+      "convergence_passed": false
+    }
+  ]
+}

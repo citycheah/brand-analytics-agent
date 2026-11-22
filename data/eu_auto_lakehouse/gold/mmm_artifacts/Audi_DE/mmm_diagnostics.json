@@ -1,0 +1,43 @@
+{
+  "brand_id": "Audi",
+  "country_iso": "DE",
+  "outcome_metric_name": "conversions",
+  "is_proxy_outcome": false,
+  "is_spend_modeled": false,
+  "roas_claim_blocked": false,
+  "roi_label": "incremental_roas",
+  "excluded_interpolated_rows": 0,
+  "champion_tier": "tier3_bayesian_pymc_nutpie",
+  "ladder_comparison": [
+    {
+      "tier": "tier1_spend_proportional",
+      "rmse": 55.2115,
+      "mape_pct": 6.964,
+      "r2": 0.3933,
+      "method": "proportional_spend_allocation"
+    },
+    {
+      "tier": "tier2_ridge_adstock_hill",
+      "rmse": 25.627,
+      "mape_pct": 2.9852,
+      "r2": 0.8693,
+      "optimizer_success": true,
+      "alpha": 2.0
+    },
+    {
+      "tier": "tier3_bayesian_pymc_nutpie",
+      "rmse": 9.0927,
+      "mape_pct": 1.0688,
+      "r2": 0.9835,
+      "sampler": "nutpie",
+      "chains": 2,
+      "draws": 100,
+      "tune": 100,
+      "max_rhat": 1.3504,
+      "min_ess": 5.3,
+      "divergences": 2,
+      "excluded_interpolated_rows": 0,
+      "convergence_passed": false
+    }
+  ]
+}

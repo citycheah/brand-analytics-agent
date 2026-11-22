@@ -12,7 +12,9 @@ import pytest
 from brand_analytics_app.agent import data_analyst_agent
 
 CASES_PATH = Path(__file__).resolve().parent / "datasets" / "federated_intel_cases.json"
-WORKSPACE_LAKEHOUSE = Path(__file__).resolve().parents[3] / "data" / "eu_auto_lakehouse"
+_REPO_LAKEHOUSE = Path(__file__).resolve().parents[2] / "data" / "eu_auto_lakehouse"
+_PARENT_LAKEHOUSE = Path(__file__).resolve().parents[3] / "data" / "eu_auto_lakehouse"
+WORKSPACE_LAKEHOUSE = _REPO_LAKEHOUSE if _REPO_LAKEHOUSE.exists() else _PARENT_LAKEHOUSE
 
 
 def test_adk_agent_registers_all_federated_tools_without_heavy_ml_imports() -> None:

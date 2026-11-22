@@ -18,21 +18,31 @@ from brand_analytics_app.tools.federated_intel import (
     run_mmm_what_if_simulation,
 )
 
-WORKSPACE_LAKEHOUSE = Path(__file__).resolve().parents[3] / "data" / "eu_auto_lakehouse"
-WORKSPACE_VELOCITY = Path(__file__).resolve().parents[3] / "competitive-velocity-ml-engine" / "data" / "gold_velocity"
+_PARENT_LAKEHOUSE = Path(__file__).resolve().parents[3] / "data" / "eu_auto_lakehouse"
+_REPO_LAKEHOUSE = Path(__file__).resolve().parents[2] / "data" / "eu_auto_lakehouse"
+WORKSPACE_LAKEHOUSE = _REPO_LAKEHOUSE if _REPO_LAKEHOUSE.exists() else _PARENT_LAKEHOUSE
+_PARENT_VELOCITY = Path(__file__).resolve().parents[3] / "competitive-velocity-ml-engine" / "data" / "gold_velocity"
+WORKSPACE_VELOCITY = (
+    WORKSPACE_LAKEHOUSE / "gold" / "velocity_artifacts"
+    if (WORKSPACE_LAKEHOUSE / "gold" / "velocity_artifacts").exists()
+    else _PARENT_VELOCITY
+)
 
 
 def _copy_fixture_lakehouse(tmp_path: Path) -> Path:
     dest = tmp_path / "lakehouse"
     shutil.copytree(WORKSPACE_LAKEHOUSE, dest)
+    overrides_dir = dest / "overrides"
+    if overrides_dir.exists():
+        for ov_file in overrides_dir.glob("*.json"):
+            ov_file.unlink()
     return dest
 
 
 def test_federated_tools_read_lakehouse_and_enforce_guardrails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    if not WORKSPACE_LAKEHOUSE.exists():
-        pytest.skip("eu_auto_lakehouse fixture not present")
+    assert WORKSPACE_LAKEHOUSE.exists(), f"Bundled lakehouse missing at {WORKSPACE_LAKEHOUSE}"
 
     lakehouse = _copy_fixture_lakehouse(tmp_path)
     monkeypatch.setenv("INTEL_LAKEHOUSE_DIR", str(lakehouse))
@@ -94,8 +104,7 @@ def test_federated_tools_read_lakehouse_and_enforce_guardrails(
 async def test_fastapi_portal_overrides_media_and_mmm_endpoints(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    if not WORKSPACE_LAKEHOUSE.exists():
-        pytest.skip("eu_auto_lakehouse fixture not present")
+    assert WORKSPACE_LAKEHOUSE.exists(), f"Bundled lakehouse missing at {WORKSPACE_LAKEHOUSE}"
 
     lakehouse = _copy_fixture_lakehouse(tmp_path)
     monkeypatch.setenv("INTEL_LAKEHOUSE_DIR", str(lakehouse))
@@ -294,3 +303,22 @@ def test_velocity_brand_filter_resolves_channel_subbrands(
     assert missing["total_scored_videos"] == 0
     assert missing["predicted_breakouts"] == 0
     assert missing["breakout_queue"] == []
+
+
+def test_standalone_configs_resolve_bundled_lakehouse_and_velocity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from brand_analytics_app import configs
+
+    monkeypatch.delenv("INTEL_LAKEHOUSE_DIR", raising=False)
+    monkeypatch.delenv("VELOCITY_GOLD_DIR", raising=False)
+    monkeypatch.setattr(configs, "_WORKSPACE_ROOT", tmp_path)
+
+    lakehouse_dir = Path(configs.INTEL_LAKEHOUSE_DIR)
+    velocity_dir = Path(configs.VELOCITY_GOLD_DIR)
+    expected_root = configs._REPO_ROOT / "data" / "eu_auto_lakehouse"
+
+    assert lakehouse_dir == expected_root
+    assert lakehouse_dir.exists()
+    assert velocity_dir == expected_root / "gold" / "velocity_artifacts"
+    assert (velocity_dir / "velocity_scores.parquet").exists()

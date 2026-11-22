@@ -1,0 +1,116 @@
+{
+  "brand_id": "BMW",
+  "country_iso": "DE",
+  "outcome_metric_name": "google_trends_index",
+  "outcome_source": "google_trends_proxy",
+  "is_proxy_outcome": true,
+  "is_spend_modeled": false,
+  "roas_claim_blocked": true,
+  "roi_label": "proxy_index_only",
+  "disclaimer": "Outcome is `google_trends_index` (search interest proxy). Financial ROAS claims are blocked; report directional elasticity and relative index lift only.",
+  "champion_tier": "tier3_bayesian_pymc_nutpie",
+  "channels": {
+    "own_spend_meta_usd": {
+      "baseline_weekly_spend_usd": 23173.03,
+      "beta": 36.4248,
+      "ec50_usd": 18254.75,
+      "slope": 1.2089,
+      "adstock_lambda": 0.3299,
+      "total_spend_usd": 3614992.46,
+      "total_contribution": 3370.71,
+      "roas_mean": 0.9324,
+      "roas_sd": 0.4387,
+      "roas_hdi_90": [
+        0.3055,
+        1.3603
+      ]
+    },
+    "own_spend_youtube_usd": {
+      "baseline_weekly_spend_usd": 20761.19,
+      "beta": 44.1458,
+      "ec50_usd": 43495.64,
+      "slope": 1.5734,
+      "adstock_lambda": 0.629,
+      "total_spend_usd": 3238745.05,
+      "total_contribution": 1714.24,
+      "roas_mean": 0.5293,
+      "roas_sd": 0.1824,
+      "roas_hdi_90": [
+        0.2792,
+        0.6791
+      ]
+    },
+    "own_spend_tiktok_usd": {
+      "baseline_weekly_spend_usd": 11851.55,
+      "beta": 25.3164,
+      "ec50_usd": 14075.54,
+      "slope": 1.1085,
+      "adstock_lambda": 0.1516,
+      "total_spend_usd": 1848841.79,
+      "total_contribution": 1907.49,
+      "roas_mean": 1.0317,
+      "roas_sd": 0.507,
+      "roas_hdi_90": [
+        0.4463,
+        1.566
+      ]
+    },
+    "own_spend_display_usd": {
+      "baseline_weekly_spend_usd": 10628.51,
+      "beta": 33.5689,
+      "ec50_usd": 5845.29,
+      "slope": 1.494,
+      "adstock_lambda": 0.2077,
+      "total_spend_usd": 1658047.66,
+      "total_contribution": 4849.35,
+      "roas_mean": 2.9247,
+      "roas_sd": 3.1747,
+      "roas_hdi_90": [
+        0.1092,
+        8.2946
+      ]
+    }
+  },
+  "theme_attribution": [
+    {
+      "theme_label": "EV Range & Charging Infrastructure",
+      "total_spend_usd": 3163499.96,
+      "spend_share_pct": 30.53,
+      "incremental_per_1k_usd": 0.2586,
+      "estimated_contribution": 818.0,
+      "contribution_share_pct": 56.86
+    },
+    {
+      "theme_label": "BMW Bespoke Cabin Craftsmanship",
+      "total_spend_usd": 2182703.11,
+      "spend_share_pct": 21.07,
+      "incremental_per_1k_usd": 0.1359,
+      "estimated_contribution": 296.59,
+      "contribution_share_pct": 20.62
+    },
+    {
+      "theme_label": "0% APR Flexible Lease Offer",
+      "total_spend_usd": 2071462.81,
+      "spend_share_pct": 19.99,
+      "incremental_per_1k_usd": 0.0947,
+      "estimated_contribution": 196.12,
+      "contribution_share_pct": 13.63
+    },
+    {
+      "theme_label": "BMW Motorsport & Track Heritage",
+      "total_spend_usd": 1763691.96,
+      "spend_share_pct": 17.02,
+      "incremental_per_1k_usd": 0.0725,
+      "estimated_contribution": 127.84,
+      "contribution_share_pct": 8.89
+    },
+    {
+      "theme_label": "Autonomous & ADAS Safety Tech",
+      "total_spend_usd": 1179269.11,
+      "spend_share_pct": 11.38,
+      "incremental_per_1k_usd": 0.0,
+      "estimated_contribution": 0.0,
+      "contribution_share_pct": 0.0
+    }
+  ]
+}

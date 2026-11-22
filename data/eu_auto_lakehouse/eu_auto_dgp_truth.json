@@ -1,0 +1,67 @@
+{
+  "vertical": "EU_AUTOMOTIVE",
+  "num_weeks": 156,
+  "start_monday": "2024-01-01",
+  "parameters": {
+    "adstock_lambda": {
+      "meta_paid": 0.35,
+      "youtube_paid": 0.5,
+      "tiktok_paid": 0.25,
+      "display": 0.15
+    },
+    "channels": {
+      "own_spend_meta_usd": {
+        "beta": 240.0,
+        "ec50_usd": 22000.0,
+        "slope": 1.35,
+        "adstock_lambda": 0.35
+      },
+      "own_spend_youtube_usd": {
+        "beta": 310.0,
+        "ec50_usd": 24000.0,
+        "slope": 1.3,
+        "adstock_lambda": 0.5
+      },
+      "own_spend_tiktok_usd": {
+        "beta": 180.0,
+        "ec50_usd": 14000.0,
+        "slope": 1.4,
+        "adstock_lambda": 0.25
+      },
+      "own_spend_display_usd": {
+        "beta": 110.0,
+        "ec50_usd": 16000.0,
+        "slope": 1.2,
+        "adstock_lambda": 0.15
+      }
+    },
+    "competitor_cannibalization_coef": -18.0,
+    "base_intercept": 420.0,
+    "promo_lift": 55.0,
+    "holiday_lift": -28.0,
+    "price_elasticity": -90.0,
+    "noise_std": 8.0
+  },
+  "true_marginal_roas_at_mean": {
+    "own_spend_meta_usd": {
+      "mean_weekly_spend_usd": 23173.03,
+      "true_avg_roas_per_1k_usd": 5.2115,
+      "true_total_contribution": 18839.47
+    },
+    "own_spend_youtube_usd": {
+      "mean_weekly_spend_usd": 23762.67,
+      "true_avg_roas_per_1k_usd": 6.3277,
+      "true_total_contribution": 23456.75
+    },
+    "own_spend_tiktok_usd": {
+      "mean_weekly_spend_usd": 11851.55,
+      "true_avg_roas_per_1k_usd": 6.5554,
+      "true_total_contribution": 12119.95
+    },
+    "own_spend_display_usd": {
+      "mean_weekly_spend_usd": 10628.51,
+      "true_avg_roas_per_1k_usd": 3.7747,
+      "true_total_contribution": 6258.66
+    }
+  }
+}

@@ -1,0 +1,116 @@
+{
+  "brand_id": "Mercedes-Benz",
+  "country_iso": "DE",
+  "outcome_metric_name": "google_trends_index",
+  "outcome_source": "google_trends_proxy",
+  "is_proxy_outcome": true,
+  "is_spend_modeled": false,
+  "roas_claim_blocked": true,
+  "roi_label": "proxy_index_only",
+  "disclaimer": "Outcome is `google_trends_index` (search interest proxy). Financial ROAS claims are blocked; report directional elasticity and relative index lift only.",
+  "champion_tier": "tier3_bayesian_pymc_nutpie",
+  "channels": {
+    "own_spend_meta_usd": {
+      "baseline_weekly_spend_usd": 21302.63,
+      "beta": 28.2877,
+      "ec50_usd": 15258.16,
+      "slope": 1.3472,
+      "adstock_lambda": 0.2666,
+      "total_spend_usd": 3323210.2,
+      "total_contribution": 2824.11,
+      "roas_mean": 0.8498,
+      "roas_sd": 0.4379,
+      "roas_hdi_90": [
+        0.3057,
+        1.3743
+      ]
+    },
+    "own_spend_youtube_usd": {
+      "baseline_weekly_spend_usd": 22276.07,
+      "beta": 44.9741,
+      "ec50_usd": 40292.82,
+      "slope": 1.2698,
+      "adstock_lambda": 0.561,
+      "total_spend_usd": 3475066.42,
+      "total_contribution": 2427.89,
+      "roas_mean": 0.6987,
+      "roas_sd": 0.3198,
+      "roas_hdi_90": [
+        0.2882,
+        1.1474
+      ]
+    },
+    "own_spend_tiktok_usd": {
+      "baseline_weekly_spend_usd": 11597.97,
+      "beta": 31.5616,
+      "ec50_usd": 17548.32,
+      "slope": 1.168,
+      "adstock_lambda": 0.2681,
+      "total_spend_usd": 1809283.58,
+      "total_contribution": 2057.82,
+      "roas_mean": 1.1374,
+      "roas_sd": 0.5403,
+      "roas_hdi_90": [
+        0.471,
+        1.8979
+      ]
+    },
+    "own_spend_display_usd": {
+      "baseline_weekly_spend_usd": 13589.07,
+      "beta": 15.6949,
+      "ec50_usd": 14418.94,
+      "slope": 1.2655,
+      "adstock_lambda": 0.2382,
+      "total_spend_usd": 2119895.14,
+      "total_contribution": 1419.16,
+      "roas_mean": 0.6694,
+      "roas_sd": 0.5809,
+      "roas_hdi_90": [
+        0.0702,
+        1.5971
+      ]
+    }
+  },
+  "theme_attribution": [
+    {
+      "theme_label": "0% APR Flexible Lease Offer",
+      "total_spend_usd": 2440422.17,
+      "spend_share_pct": 22.75,
+      "incremental_per_1k_usd": 0.2717,
+      "estimated_contribution": 663.13,
+      "contribution_share_pct": 49.37
+    },
+    {
+      "theme_label": "EV Range & Charging Infrastructure",
+      "total_spend_usd": 2439680.14,
+      "spend_share_pct": 22.74,
+      "incremental_per_1k_usd": 0.1404,
+      "estimated_contribution": 342.53,
+      "contribution_share_pct": 25.5
+    },
+    {
+      "theme_label": "Autonomous & ADAS Safety Tech",
+      "total_spend_usd": 1805272.5,
+      "spend_share_pct": 16.83,
+      "incremental_per_1k_usd": 0.1264,
+      "estimated_contribution": 228.17,
+      "contribution_share_pct": 16.99
+    },
+    {
+      "theme_label": "Mercedes-Benz Motorsport & Track Heritage",
+      "total_spend_usd": 2247903.01,
+      "spend_share_pct": 20.95,
+      "incremental_per_1k_usd": 0.0334,
+      "estimated_contribution": 75.13,
+      "contribution_share_pct": 5.59
+    },
+    {
+      "theme_label": "Mercedes-Benz Bespoke Cabin Craftsmanship",
+      "total_spend_usd": 1794177.53,
+      "spend_share_pct": 16.73,
+      "incremental_per_1k_usd": 0.0191,
+      "estimated_contribution": 34.24,
+      "contribution_share_pct": 2.55
+    }
+  ]
+}

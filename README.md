@@ -18,13 +18,43 @@ This system automates the end-to-end competitive advertising intelligence workfl
 
 ---
 
+## Creative & Marketing Intelligence Suite (`v0.1.0`) — Product Architecture & Module Map
+
+`brand-analytics-agent` is the flagship product shell of the 7-repository **`creative-intel-suite`**:
+
+| Component | Role in `creative-intel-suite` (`v0.1.0`) | Stack |
+| :--- | :--- | :--- |
+| **[`brand-analytics-agent`](https://github.com/citycheah/brand-analytics-agent)** | **Flagship Product Shell** — 5-page Next.js 15 Portal, FastAPI REST/SSE & Google ADK Copilot | Next.js 15, FastAPI, Google ADK, DuckDB |
+| **[`intel-core`](https://github.com/citycheah/intel-core)** | **Core SDK** — Canonical contracts, DuckDB HITL views, FinOps, Hill optimizer, Golden Vision evals | Pydantic v2, PyArrow, DuckDB, Gemini |
+| **[`intel-etl-spark`](https://github.com/citycheah/intel-etl-spark)** | **Medallion Batch ETL** — Bronze->Silver->Gold Spark jobs, EU Auto DGP & DuckDB local parity | PySpark 3.5, DuckDB, PyArrow |
+| **[`intel-mmm`](https://github.com/citycheah/intel-mmm)** | **Causal Incrementality** — 3-tier Bayesian MMM ladder, separate theme attribution & ROAS guardrails | PyMC-Marketing, `nutpie`, Ridge |
+| **[`creative-intelligence-toolkit`](https://github.com/citycheah/creative-intelligence-toolkit)** | **Ingestion Connectors** — Meta EU DSA Ad Library, Google Trends, YouTube/TikTok/IG/FB & alerts | Gemini, Playwright, `yt-dlp`, `intel-core` |
+| **[`creative-analytics-grouping`](https://github.com/citycheah/creative-analytics-grouping)** | **Theme & Fatigue Engine** — Anti-join unseen dissection, 30-D UMAP+HDBSCAN & wearout tracking | Vertex/Gemini, HDBSCAN, UMAP |
+| **[`competitive-velocity-ml-engine`](https://github.com/citycheah/competitive-velocity-ml-engine)** | **Velocity & Drift Engine** — YouTube $t_0$ breakout prediction, dbt PIT features & PSI drift | dbt-duckdb, LightGBM, SHAP |
+
+---
+
+## Visual Product Tour (Next.js 15 Portal)
+
+All screenshots below run live against the bundled EU Automotive (`BMW`, `Mercedes-Benz`, `Audi`, `Porsche`) lakehouse with `DATA_BACKEND=local`:
+
+| Workflow Step | Preview |
+| :--- | :--- |
+| **1. Executive Copilot (`/`)** — EU Auto KPI snapshot, 4-step workflow navigation & Google ADK SSE Copilot | ![Executive Copilot](./docs/screenshots/01-executive-copilot.png) |
+| **2. Market Share & Themes (`/themes`)** — Decision Brief, SOS vs. SOV Recharts bar chart, UMAP theme clusters, Wearout Queue & YouTube breakouts | ![Market Share & Themes](./docs/screenshots/02-market-share-themes.png) |
+| **3. Ad Creative Review & HITL (`/creatives`)** — Hook/CTA/Format-Fit playbooks with `<dialog>` slide-over `OverrideDrawer` | ![Ad Creative Review & HITL](./docs/screenshots/03-creative-review-hitl.png) |
+| **4. Budget & ROI Planner (`/mmm`)** — 1st-party locked weekly channel sliders, Hill saturation curves & 90% HDI ROAS table | ![Budget & ROI Planner](./docs/screenshots/04-mmm-budget-planner.png) |
+| **5. System Health & Velocity (`/velocity`)** — YouTube $t_0$ breakout queue, PSI feature drift chart, FinOps LLM ledger & Vision Eval gates | ![System Health & Velocity](./docs/screenshots/05-velocity-system-health.png) |
+
+---
+
 ## Table of Contents
 1. [Business Problem & Engineering Motivation](#1-business-problem--engineering-motivation)
 2. [System Architecture](#2-system-architecture)
 3. [Seven Core AI Engineering Patterns](#3-seven-core-ai-engineering-patterns)
 4. [Interactive Sample Reports & Synthetic Dataset](#4-interactive-sample-reports--synthetic-dataset)
 5. [Repository Structure](#5-repository-structure)
-6. [Quickstart Guide (Zero-Cloud Local Mode & Enterprise GCP Mode)](#6-quickstart-guide)
+6. [Quickstart Guide (Zero-Cloud Local Mode & Scale-to-Zero Cloud Run)](#6-quickstart-guide)
 7. [Verification & Testing](#7-verification--testing)
 
 ---
@@ -202,7 +232,11 @@ brand-analytics-agent/
 │   ├── app.py                        # Chainlit conversational UI, OAuth domain guard, live step streaming
 │   └── safe_data_layer.py            # Resilient SQLAlchemy SQLite data layer with debounced GCS backup
 ├── data/
+│   ├── eu_auto_lakehouse/            # Bundled 2.0 MB EU Automotive Bronze/Silver/Gold lakehouse + MMM/Velocity artifacts
 │   └── synthetic_ad_occurrences.parquet # 15,488-row multi-market synthetic dataset for local execution
+├── docs/
+│   └── screenshots/                  # 5-page Portal visual walkthrough PNGs
+├── docker-compose.yml                # Self-contained FastAPI (:8000) + Next.js Portal (:3000) local stack
 ├── examples/
 │   └── sample_reports/               # Pre-generated interactive HTML reports (Competitive & Feasibility)
 ├── scripts/
@@ -224,8 +258,17 @@ brand-analytics-agent/
 ## 6. Quickstart Guide
 
 ### Mode A: Zero-Cloud Local Demo (`DATA_BACKEND=local`)
-Run the analytics tools, synthetic dataset generator, and full unit test suite locally without a GCP project or BigQuery table.
+`brand-analytics-agent` ships with the bundled EU Automotive lakehouse (`data/eu_auto_lakehouse/`) and synthetic ad dataset (`data/synthetic_ad_occurrences.parquet`), so a standalone clone serves the complete 5-page Portal out of the box.
 
+#### Option 1: One-Command Self-Contained Docker Compose
+```bash
+git clone https://github.com/citycheah/brand-analytics-agent.git
+cd brand-analytics-agent
+docker compose up --build
+```
+Open **[http://localhost:3000](http://localhost:3000)** (FastAPI serves on `:8000`).
+
+#### Option 2: Native Local Dev (`uv` + `npm`)
 1. **Clone and configure `.env`:**
    ```bash
    cd brand-analytics-agent
@@ -238,12 +281,7 @@ Run the analytics tools, synthetic dataset generator, and full unit test suite l
    uv sync --dev
    ```
 
-3. **Generate or refresh the synthetic dataset & sample reports:**
-   ```bash
-   uv run python scripts/generate_synthetic_ad_data.py
-   ```
-
-4. **Launch the FastAPI Backend + Next.js 15 Portal:**
+3. **Launch the FastAPI Backend + Next.js 15 Portal:**
    ```bash
    # Terminal 1: Start the FastAPI ADK & Portal Backend
    uv run uvicorn backend.main:app --host 127.0.0.1 --port 8000
@@ -258,35 +296,53 @@ Run the analytics tools, synthetic dataset generator, and full unit test suite l
 
 ---
 
-### Mode B: Enterprise GCP BigQuery + Cloud Run Deployment (`DATA_BACKEND=bigquery`)
-For production deployment connected to live BigQuery advertising occurrence snapshots and Google Cloud Storage:
+### Mode B: Scale-to-Zero Cloud Run Demo & Enterprise GCP Deployment
+Because `frontend-portal/next.config.mjs` bakes `BACKEND_URL` into `.next/routes-manifest.json` during `npm run build`, deploy the **backend first**, then pass its HTTPS URL into the **portal** image build as `--build-arg BACKEND_URL=...` (note: legacy `cloudbuild.yaml` targets the retired Chainlit container; use the 2-step build/deploy flow below for the Next.js 15 Portal).
 
-1. **Authenticate with Google Cloud:**
+1. **Deploy FastAPI Backend (`--min-instances=0`, scale-to-zero):**
    ```bash
-   gcloud auth application-default login
+   docker build -t europe-west3-docker.pkg.dev/$PROJECT_ID/creative-intel/backend:v0.1.0 -f backend/Dockerfile .
+   docker push europe-west3-docker.pkg.dev/$PROJECT_ID/creative-intel/backend:v0.1.0
+
+   gcloud run deploy creative-intel-backend \
+     --image europe-west3-docker.pkg.dev/$PROJECT_ID/creative-intel/backend:v0.1.0 \
+     --region europe-west3 \
+     --port 8080 \
+     --min-instances 0 \
+     --allow-unauthenticated \
+     --set-env-vars DATA_BACKEND=local,GOOGLE_GENAI_USE_VERTEXAI=False
+
+   BACKEND_URL=$(gcloud run services describe creative-intel-backend --region europe-west3 --format='value(status.url)')
    ```
-2. **Configure `.env` for BigQuery & GCS:**
-   ```ini
-   DATA_BACKEND=bigquery
-   GOOGLE_CLOUD_PROJECT=your-gcp-project-id
-   GOOGLE_CLOUD_LOCATION=global
-   GOOGLE_GENAI_USE_VERTEXAI=True
-   BQ_TABLE_NAME=your-gcp-project-id.brand_analytics.competitive_ad_occurrences
-   LOGS_BUCKET_NAME=your-gcs-logs-and-extracts-bucket
-   LOCAL_DEV_WRITE=False
+   *(To enable live conversational streaming in the Executive Copilot tab under `GOOGLE_GENAI_USE_VERTEXAI=False`, pass `--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest` on `gcloud run deploy`, or set `GEMINI_API_KEY` in `.env` / shell before `docker compose up`.)*
+
+2. **Build & Deploy Next.js 15 Portal (`--port=3000`, `--min-instances=0`, `--timeout=300`):**
+   ```bash
+   docker build --build-arg BACKEND_URL="$BACKEND_URL" \
+     -t europe-west3-docker.pkg.dev/$PROJECT_ID/creative-intel/portal:v0.1.0 \
+     -f frontend-portal/Dockerfile ./frontend-portal
+   docker push europe-west3-docker.pkg.dev/$PROJECT_ID/creative-intel/portal:v0.1.0
+
+   gcloud run deploy creative-intel-portal \
+     --image europe-west3-docker.pkg.dev/$PROJECT_ID/creative-intel/portal:v0.1.0 \
+     --region europe-west3 \
+     --port 3000 \
+     --min-instances 0 \
+     --timeout 300 \
+     --allow-unauthenticated \
+     --set-env-vars BACKEND_URL="$BACKEND_URL"
    ```
-3. **Provision Infrastructure & Deploy via Terraform / Cloud Build:**
-   See [`deployment/terraform/`](./deployment/terraform/) and [`cloudbuild.yaml`](./cloudbuild.yaml) for automated container builds and Cloud Run service deployment.
+   > **Ephemeral Filesystem Caveat (`DATA_BACKEND=local`):** Cloud Run container filesystems reset across cold starts (`--min-instances=0`), so runtime HITL files in `data/eu_auto_lakehouse/overrides/`, `.sessions/`, and `local_storage/` are ephemeral in demo mode. For persistent multi-user state and live ad tables, switch to `DATA_BACKEND=bigquery` (`LOGS_BUCKET_NAME`, `GOOGLE_GENAI_USE_VERTEXAI=True`) and provision IAM/Artifact Registry via [`deployment/terraform/`](./deployment/terraform/).
 
 ---
 
 ## 7. Verification & Testing
 
-The repository includes **63 passing Python automated tests** (60 unit + 3 integration) and **17 TypeScript unit tests** for the Next.js Portal (`frontend-portal`), verifying country whitelist guardrails, disjoint keyword validation, co-mention fractional attribution, ceiling-month feasibility scaling, multimodal early stopping, federated lakehouse queries, atomic `<50ms` DuckDB HITL overrides, Hill MMM optimization, velocity drift exports, SSE streaming multiplexing, and Portal API wire adapters.
+The repository includes **64 passing Python automated tests** (61 unit + 3 integration), **2 ADK trajectory/eval tests**, and **17 TypeScript unit tests** for the Next.js Portal (`frontend-portal`), verifying country whitelist guardrails, disjoint keyword validation, co-mention fractional attribution, ceiling-month feasibility scaling, multimodal early stopping, federated lakehouse queries, atomic `<50ms` DuckDB HITL overrides, Hill MMM optimization, velocity drift exports, SSE streaming multiplexing, and Portal API wire adapters.
 
 ```bash
 uv run ruff check brand_analytics_app backend frontend tests
-uv run pytest tests/unit/ tests/integration/ -v
+uv run pytest tests/unit/ tests/integration/ tests/eval/ -v
 npm --prefix frontend-portal run typecheck
 npm --prefix frontend-portal run test
 npm --prefix frontend-portal run build

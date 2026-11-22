@@ -1,0 +1,116 @@
+{
+  "brand_id": "Porsche",
+  "country_iso": "DE",
+  "outcome_metric_name": "conversions",
+  "outcome_source": "synthetic_dgp",
+  "is_proxy_outcome": false,
+  "is_spend_modeled": false,
+  "roas_claim_blocked": false,
+  "roi_label": "incremental_roas",
+  "disclaimer": "Incremental channel ROAS calibrated against 1st-party/DGP conversion outcomes.",
+  "champion_tier": "tier3_bayesian_pymc_nutpie",
+  "channels": {
+    "own_spend_meta_usd": {
+      "baseline_weekly_spend_usd": 13374.92,
+      "beta": 296.0589,
+      "ec50_usd": 24760.39,
+      "slope": 1.1597,
+      "adstock_lambda": 0.3574,
+      "total_spend_usd": 2086488.17,
+      "total_contribution": 16269.25,
+      "roas_mean": 7.7974,
+      "roas_sd": 3.5743,
+      "roas_hdi_90": [
+        3.8466,
+        11.4784
+      ]
+    },
+    "own_spend_youtube_usd": {
+      "baseline_weekly_spend_usd": 15585.99,
+      "beta": 376.4407,
+      "ec50_usd": 31459.93,
+      "slope": 1.3726,
+      "adstock_lambda": 0.53,
+      "total_spend_usd": 2431414.42,
+      "total_contribution": 17026.14,
+      "roas_mean": 7.0026,
+      "roas_sd": 1.6809,
+      "roas_hdi_90": [
+        4.7469,
+        9.243
+      ]
+    },
+    "own_spend_tiktok_usd": {
+      "baseline_weekly_spend_usd": 7868.34,
+      "beta": 214.0488,
+      "ec50_usd": 12651.03,
+      "slope": 1.0814,
+      "adstock_lambda": 0.2499,
+      "total_spend_usd": 1227461.43,
+      "total_contribution": 12812.93,
+      "roas_mean": 10.4386,
+      "roas_sd": 2.9635,
+      "roas_hdi_90": [
+        6.8398,
+        16.6135
+      ]
+    },
+    "own_spend_display_usd": {
+      "baseline_weekly_spend_usd": 9056.26,
+      "beta": 144.6562,
+      "ec50_usd": 11976.86,
+      "slope": 1.1941,
+      "adstock_lambda": 0.1905,
+      "total_spend_usd": 1412776.67,
+      "total_contribution": 10130.94,
+      "roas_mean": 7.1709,
+      "roas_sd": 3.837,
+      "roas_hdi_90": [
+        3.0221,
+        14.8163
+      ]
+    }
+  },
+  "theme_attribution": [
+    {
+      "theme_label": "0% APR Flexible Lease Offer",
+      "total_spend_usd": 1920029.86,
+      "spend_share_pct": 26.82,
+      "incremental_per_1k_usd": 1.7409,
+      "estimated_contribution": 3342.52,
+      "contribution_share_pct": 31.93
+    },
+    {
+      "theme_label": "Porsche Motorsport & Track Heritage",
+      "total_spend_usd": 874373.26,
+      "spend_share_pct": 12.22,
+      "incremental_per_1k_usd": 2.7221,
+      "estimated_contribution": 2380.1,
+      "contribution_share_pct": 22.74
+    },
+    {
+      "theme_label": "EV Range & Charging Infrastructure",
+      "total_spend_usd": 1970409.58,
+      "spend_share_pct": 27.53,
+      "incremental_per_1k_usd": 1.1071,
+      "estimated_contribution": 2181.49,
+      "contribution_share_pct": 20.84
+    },
+    {
+      "theme_label": "Porsche Bespoke Cabin Craftsmanship",
+      "total_spend_usd": 1181263.85,
+      "spend_share_pct": 16.5,
+      "incremental_per_1k_usd": 1.461,
+      "estimated_contribution": 1725.87,
+      "contribution_share_pct": 16.49
+    },
+    {
+      "theme_label": "Autonomous & ADAS Safety Tech",
+      "total_spend_usd": 1212064.12,
+      "spend_share_pct": 16.93,
+      "incremental_per_1k_usd": 0.6919,
+      "estimated_contribution": 838.59,
+      "contribution_share_pct": 8.01
+    }
+  ]
+}

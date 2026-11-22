@@ -1,0 +1,43 @@
+{
+  "brand_id": "Mercedes-Benz",
+  "country_iso": "DE",
+  "outcome_metric_name": "conversions",
+  "is_proxy_outcome": false,
+  "is_spend_modeled": false,
+  "roas_claim_blocked": false,
+  "roi_label": "incremental_roas",
+  "excluded_interpolated_rows": 0,
+  "champion_tier": "tier3_bayesian_pymc_nutpie",
+  "ladder_comparison": [
+    {
+      "tier": "tier1_spend_proportional",
+      "rmse": 56.8575,
+      "mape_pct": 6.4944,
+      "r2": 0.4032,
+      "method": "proportional_spend_allocation"
+    },
+    {
+      "tier": "tier2_ridge_adstock_hill",
+      "rmse": 23.7848,
+      "mape_pct": 2.489,
+      "r2": 0.8956,
+      "optimizer_success": true,
+      "alpha": 2.0
+    },
+    {
+      "tier": "tier3_bayesian_pymc_nutpie",
+      "rmse": 7.6137,
+      "mape_pct": 0.7665,
+      "r2": 0.9893,
+      "sampler": "nutpie",
+      "chains": 2,
+      "draws": 100,
+      "tune": 100,
+      "max_rhat": 2.1796,
+      "min_ess": 2.8,
+      "divergences": 0,
+      "excluded_interpolated_rows": 0,
+      "convergence_passed": false
+    }
+  ]
+}

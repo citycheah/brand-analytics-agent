@@ -1,0 +1,55 @@
+ts,stage,service,sku,asset_id,units,unit_desc,unit_cost,cost_usd,latency_s,status
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,03956469b77cb39a0d55926162b2a124fe69f4ec9d92a954b6b3901d1c161e97,1.0,per image,0.0001,0.00010000,0.420,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,0535ceae9aaf8cc5c8493b0ef7f5d22b60848cf50bc8adf3ede660c89f0966e9,1.0,per image,0.0001,0.00010000,0.500,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,0653a844b6e0c281bc69affe9abb095c88b8884c201c5d99597b1e4f357510e1,30.0,per second of video,0.0005,0.01500000,0.580,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,0723ee3496c708283d0bca3622452c3f1aee878dc02d2972fefcbdd202497048,30.0,per second of video,0.0005,0.01500000,0.660,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,0fd5874515882b91c8b1d09131be30711c5622e33a5a0217dad59ad41bcbf540,1.0,per image,0.0001,0.00010000,0.740,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,128ebc73d1c7c9750a98b0795a412a7514676b87e154be62db9bc83d8fef6d27,1.0,per image,0.0001,0.00010000,0.420,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,182971875924977b3c44bab6e32f3d358735d563fca4d5802ff0fb575e3f0eeb,1.0,per image,0.0001,0.00010000,0.500,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,188e5a5c431c362a7c0760a707beca665c2916b15888768b92e710e4a353cf2c,30.0,per second of video,0.0005,0.01500000,0.580,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,22e066c7746a227c52c2ae6513d22068f4577595e6a8196ace6947f0ebdb02ed,1.0,per image,0.0001,0.00010000,0.660,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,2f37c06756cb8dbbae824c319536e47f8310e25054b59f452ad4b588e05603b1,1.0,per image,0.0001,0.00010000,0.740,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,2ffd2fc9ecacba4629aa9fe0933bef141b18fef9945ac78b89948d4442a1fe69,30.0,per second of video,0.0005,0.01500000,0.420,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,352675af8a27e990c3bf0beef94c409dcce90b36fa847abbc019ce89179a1866,1.0,per image,0.0001,0.00010000,0.500,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,3602d5fd0b903ff8bc123b23edcd41d04fdc65a4673e3ab3f598f66d168e4c19,30.0,per second of video,0.0005,0.01500000,0.580,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,361ed4968906910b0ea47e2abd7824c07121f78b5dc3b79c23cee1cd8d64632a,15.0,per second of video,0.0005,0.00750000,0.660,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,3788c145565c5f5c7c991615b2909ed77eec397c8367b6b60035fe741a168e6b,1.0,per image,0.0001,0.00010000,0.740,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,3d6b9b77959789109900445fbd427a7d2854058b0d0d1373c0ce34622bbc2791,1.0,per image,0.0001,0.00010000,0.420,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,4167fb6260cdab118dd243a2b9d4d408807be3a66b3078deecb3580da49affa7,1.0,per image,0.0001,0.00010000,0.500,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,45ccca2cbed5d93870132ea6fc652b13511faba324b7638fc12fd4fa871f659f,1.0,per image,0.0001,0.00010000,0.580,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,4a99e7fda7cc0bbab8ce9c70018703a5b78b22b05c1ae1156450833896b76ab2,15.0,per second of video,0.0005,0.00750000,0.660,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,4f0fb65f0179a92e5c160c6b8c14d65e75cb8b99590f0063214431f4af427359,30.0,per second of video,0.0005,0.01500000,0.740,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,58a9f8f53b229615cf0b64beba43cd5407c28ee3416783cfd59819bc03932599,1.0,per image,0.0001,0.00010000,0.420,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,59375b31a2d42719a05ffda680f61c8ab04c5a097c65724a95a7a5b07a634db6,1.0,per image,0.0001,0.00010000,0.500,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,5c4c01cdb54041921f3253e307da27cf401a677badac4e4b12badc1908200214,1.0,per image,0.0001,0.00010000,0.580,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,616f4d7d780e4a4c26a630ff24d00fd045ff3a29a1d5fde445fbb67abdd7c204,30.0,per second of video,0.0005,0.01500000,0.660,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,693f8404e9651b5688f1c1ec445391d522af2aa51183ea5d0fa858d40a421829,30.0,per second of video,0.0005,0.01500000,0.740,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,7256d6bbee6fc18ebd841991e918dbd28412787f35106bef6a47d5af000ff48d,1.0,per image,0.0001,0.00010000,0.420,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,72e898dcaca2938283b0e1f9d8b132864eca1575544327a9d537271053fdb0bb,15.0,per second of video,0.0005,0.00750000,0.500,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,77ba2272e9275db218a33b03a775f0bd99f73724cbe0d37bc963ceb32ea2c520,1.0,per image,0.0001,0.00010000,0.580,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,7924efa06dda960e69ccf46c6b92d519fd975c530ac3c08d607d1f33078eb709,30.0,per second of video,0.0005,0.01500000,0.660,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,7b831be9c90cd414c384c4836f996a1412dd5fe68f0b297a4949458fb4fb7909,15.0,per second of video,0.0005,0.00750000,0.740,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,7f854aefa9b2ea5725fc93d9a023a9ab8c4477610b2d4300f27ed525ccc56848,15.0,per second of video,0.0005,0.00750000,0.420,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,87299b4a198411812d6636d1691fde2f9186e087ef9546874bc7387280e3fd45,30.0,per second of video,0.0005,0.01500000,0.500,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,879eb6c1cf10c3b7f89b6432e907c93f802d20bb1b26a60ba050c26e02009adb,30.0,per second of video,0.0005,0.01500000,0.580,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,8985c200d76caabbb80f4e0466348614c3b4eba691d439973171571c7fcc8502,1.0,per image,0.0001,0.00010000,0.660,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,8ebf638b92543f471576dc3c9b62e904c6e6829c0631709007f7318deb8cf763,1.0,per image,0.0001,0.00010000,0.740,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,935e74073fe1ca14824eacad1c8724d750cb50335e3ac5babe369b1f5166d002,15.0,per second of video,0.0005,0.00750000,0.420,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,9e4d0949f96c033947732f5964333d93b87a7626f75f29d7baa6499b76fe9b40,1.0,per image,0.0001,0.00010000,0.500,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,a1647610c12da2490ebb0327953a253d635872741f7f2f83d97dbf40e6194c35,15.0,per second of video,0.0005,0.00750000,0.580,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,a4150fd236d360db5d10551e8d1cca4fc5e18b97671b3e85b0ba319a953672f9,15.0,per second of video,0.0005,0.00750000,0.660,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,a7da61d6416673e57b5e129eb81909167bbf6d6cb4da90d1520987fafddd094d,15.0,per second of video,0.0005,0.00750000,0.740,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,aa23be9e3d4f1a6a940fdcb7ca19ff1d779166ca947e73b7d886fee607db5fff,15.0,per second of video,0.0005,0.00750000,0.420,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,ba4fdb26b96ed0f33254c12a82ea9331375e5e06ba54400381c08bc43a9bd72f,15.0,per second of video,0.0005,0.00750000,0.500,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,ca5cabc2f6f8c2ae8f2f1bba30b33332bb9e3289ec60eb6f410e17c9e6598e60,1.0,per image,0.0001,0.00010000,0.580,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,d57784e41a729a84de7649380bbcb22843522b1747e302680e3028d8f592385a,15.0,per second of video,0.0005,0.00750000,0.660,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,d6f2486d3ccc1a5a9f467332fe58261c7851301f8fdc36e07762a78b4997e379,1.0,per image,0.0001,0.00010000,0.740,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,db9ecd469796e11cc1edacabc4c32a02e9fff800a32efd0e4d43582b194850b4,1.0,per image,0.0001,0.00010000,0.420,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,de49fae635ebcd75799a69ab43b7fe487dcd80fbedf35047db8fb3bcb3ac5b3e,30.0,per second of video,0.0005,0.01500000,0.500,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,e62c7775a595004a29b7cf1081590b087bd6464c73399e56ffced8a799393f70,1.0,per image,0.0001,0.00010000,0.580,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_video_essential,f3c239f00627577fff7656d6ca802b17ca91322f824bee545d0c79b4bdb1dba7,30.0,per second of video,0.0005,0.01500000,0.660,OK
+2026-11-15T13:42:13+00:00,vision_dissection,gemini-2.5-flash,mm_image,fcf5de20ed8c259e6bceebf4a97cf2f4ad9825ebadb7eb4a83e4ffde094dd744,1.0,per image,0.0001,0.00010000,0.740,OK
+2026-11-15T13:42:13+00:00,theme_embedding,gemini-embedding-001,mm_text,batch_bmw,12500.0,per input token,2e-07,0.00250000,0.310,OK
+2026-11-15T13:42:13+00:00,theme_embedding,gemini-embedding-001,mm_text,batch_mercedes-benz,12500.0,per input token,2e-07,0.00250000,0.310,OK
+2026-11-15T13:42:13+00:00,theme_embedding,gemini-embedding-001,mm_text,batch_audi,12500.0,per input token,2e-07,0.00250000,0.310,OK
+2026-11-15T13:42:13+00:00,theme_embedding,gemini-embedding-001,mm_text,batch_porsche,12500.0,per input token,2e-07,0.00250000,0.310,OK

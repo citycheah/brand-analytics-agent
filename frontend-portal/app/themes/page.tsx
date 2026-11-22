@@ -1,513 +1,575 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { EU_AUTO_BRANDS, usePortalContext } from "@/components/PortalProvider";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  fmtCompact,
-  fmtUsd,
-  getPortalThemes,
-  getPortalVelocity,
-  PortalThemesResponse,
-  VelocityBreakoutItem,
-  VelocityResponse,
-} from "@/lib/api";
+  ArrowRight,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Download,
+} from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Scatter,
+  ScatterChart,
+  Tooltip,
+  XAxis,
+  YAxis,
+  ZAxis,
+} from "recharts";
+import { usePortal } from "@/context/PortalContext";
+import {
+  buildDecisionBrief,
+  formatCompactNumber,
+  formatCurrency,
+  matchesBrandOrSubBrand,
+} from "@/lib/analytics";
+import { getPortalThemes, getPortalVelocity } from "@/lib/api";
+import {
+  BRAND_CATALOG,
+  BRAND_LIST,
+  COUNTRY_LIST,
+  type BrandFilterValue,
+  type CountryName,
+  type PortalThemesResponse,
+  type ScatterPointItem,
+  type VelocityBreakoutItem,
+} from "@/lib/types";
+import { downloadObjectsAsCsv, slugify } from "@/lib/utils";
 
-const COUNTRIES = ["Germany", "United Kingdom", "France"];
-const BRAND_FILTERS = ["", ...EU_AUTO_BRANDS];
-
-const BRAND_CHANNEL_PATTERNS: Record<string, RegExp> = {
-  BMW: /\bbmw\b/i,
-  "Mercedes-Benz": /\b(mercedes|mercedes-benz|amg)\b/i,
-  Audi: /\baudi\b/i,
-  Porsche: /\bporsche\b/i,
-};
-
-function matchesBrandFilter(v: VelocityBreakoutItem, targetBrand: string): boolean {
-  if (!targetBrand) return true;
-  if (v.brand_id) return v.brand_id === targetBrand;
-  const title = v.channel_title ?? "";
-  const pattern = BRAND_CHANNEL_PATTERNS[targetBrand];
-  if (pattern) return pattern.test(title);
-  return title.toLowerCase().includes(targetBrand.toLowerCase());
+function ScatterTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload: ScatterPointItem }>;
+}) {
+  if (!active || !payload || !payload.length) return null;
+  const pt = payload[0].payload;
+  return (
+    <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2.5 shadow-md text-xs space-y-1 max-w-[240px]">
+      <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+        {pt.brand_id_raw}
+      </div>
+      <div className="text-zinc-600 dark:text-zinc-300">{pt.theme_label}</div>
+      <div className="flex items-center justify-between gap-4 pt-1 border-t border-zinc-100 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 font-mono tabular-nums">
+        <span>#{pt.short_asset_id || pt.asset_id}</span>
+        <span className="capitalize">{pt.media_type}</span>
+      </div>
+    </div>
+  );
 }
 
 export default function ThemesPage() {
-  const { myBrand } = usePortalContext();
-  const [country, setCountry] = useState("Germany");
-  const [brandId, setBrandId] = useState("");
-  const [data, setData] = useState<PortalThemesResponse | null>(null);
-  const [velocity, setVelocity] = useState<VelocityResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { myBrandId, navigate, theme, auditVersion } = usePortal();
+  const [country, setCountry] = useState<CountryName>("Germany");
+  const [brandFilter, setBrandFilter] = useState<BrandFilterValue>("all");
+  const [themesData, setThemesData] = useState<PortalThemesResponse | null>(
+    null
+  );
+  const [breakouts, setBreakouts] = useState<VelocityBreakoutItem[]>([]);
+  const [activeThemeHighlight, setActiveThemeHighlight] = useState<
+    string | null
+  >(null);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [chartsReady, setChartsReady] = useState(false);
+  const [exportedTable, setExportedTable] = useState<
+    "sos" | "wearout" | "youtube" | null
+  >(null);
 
   useEffect(() => {
-    let cancelled = false;
+    setChartsReady(true);
+  }, []);
+
+  const flashExported = (key: "sos" | "wearout" | "youtube") => {
+    setExportedTable(key);
+    window.setTimeout(() => {
+      setExportedTable((curr) => (curr === key ? null : curr));
+    }, 1800);
+  };
+
+  useEffect(() => {
+    let active = true;
     setLoading(true);
-    setError(null);
+    setErrorMsg(null);
     Promise.all([
-      getPortalThemes(country, brandId || undefined),
-      getPortalVelocity(20, brandId || undefined).catch(() => null),
+      getPortalThemes({ country, brand_id: brandFilter }),
+      getPortalVelocity({ top_k: 20, brand_id: brandFilter }).catch(() => ({
+        breakout_queue: [] as VelocityBreakoutItem[],
+      })),
     ])
-      .then(([themesRes, velRes]) => {
-        if (!cancelled) {
-          setData(themesRes);
-          setVelocity(velRes);
-          setLoading(false);
-        }
+      .then(([tRes, vRes]) => {
+        if (!active) return;
+        setThemesData(tRes);
+        setBreakouts(vRes.breakout_queue);
+        setLoading(false);
       })
-      .catch((err: Error) => {
-        if (!cancelled) {
-          setError(err.message);
-          setLoading(false);
-        }
+      .catch((err: unknown) => {
+        if (!active) return;
+        setErrorMsg(
+          err instanceof Error
+            ? err.message
+            : "Failed to load market & theme telemetry."
+        );
+        setLoading(false);
       });
     return () => {
-      cancelled = true;
+      active = false;
     };
-  }, [country, brandId]);
+  }, [country, brandFilter, auditVersion]);
 
-  const sos = data?.sos_sov;
-  const tf = data?.themes_and_fatigue;
-  const themesList = tf?.themes ?? [];
-  const fatigueList = tf?.fatigue_alerts ?? [];
-  const scatterPoints = tf?.scatter_points ?? [];
-  const jaccardList = tf?.jaccard_overlaps ?? [];
-  const categoryHhi = tf?.category_hhi ?? 0;
+  const decisionBrief = useMemo(() => {
+    if (!themesData) return [];
+    return buildDecisionBrief(themesData, myBrandId, brandFilter, breakouts);
+  }, [themesData, myBrandId, brandFilter, breakouts]);
 
-  const myBrandRow = sos?.brands.find((b) => b.brand_id === myBrand);
-  const topCompetitorRow = sos
-    ? [...sos.brands]
-        .filter((b) => b.brand_id !== myBrand)
-        .sort((a, b) => b.sov_pct - a.sov_pct)[0]
-    : undefined;
-  const selectedBrandRow =
-    brandId && sos ? sos.brands.find((b) => b.brand_id === brandId) : undefined;
+  const filteredBreakouts = useMemo(() => {
+    return breakouts.filter((v) => matchesBrandOrSubBrand(v, brandFilter));
+  }, [breakouts, brandFilter]);
 
-  const myVoiceGap = myBrandRow ? myBrandRow.sov_pct - myBrandRow.sos_pct : 0;
-  const selectedGap = selectedBrandRow
-    ? selectedBrandRow.sov_pct - selectedBrandRow.sos_pct
-    : 0;
+  const scatterByTheme = useMemo(() => {
+    if (!themesData) return [];
+    const grouped = new Map<
+      string,
+      { color: string; points: ScatterPointItem[] }
+    >();
+    for (const t of themesData.themes_and_fatigue.themes) {
+      grouped.set(t.theme_label, { color: t.color, points: [] });
+    }
+    for (const pt of themesData.themes_and_fatigue.scatter_points) {
+      if (activeThemeHighlight && pt.theme_label !== activeThemeHighlight)
+        continue;
+      const entry = grouped.get(pt.theme_label) ?? {
+        color: "#71717a",
+        points: [],
+      };
+      entry.points.push(pt);
+      grouped.set(pt.theme_label, entry);
+    }
+    return Array.from(grouped.entries()).filter(
+      ([, g]) => g.points.length > 0
+    );
+  }, [themesData, activeThemeHighlight]);
 
-  const whitespaceTheme =
-    themesList.find((t) => t.scope === "brand_exclusive_whitespace") ?? themesList[0];
+  const scatterBounds = useMemo(() => {
+    const pts = themesData?.themes_and_fatigue.scatter_points ?? [];
+    if (pts.length === 0) {
+      return {
+        x: [-7, 7] as [number, number],
+        y: [-7, 7] as [number, number],
+      };
+    }
+    const xs = pts.map((p) => p.umap_x);
+    const ys = pts.map((p) => p.umap_y);
+    return {
+      x: [Math.floor(Math.min(...xs) - 1), Math.ceil(Math.max(...xs) + 1)] as [
+        number,
+        number,
+      ],
+      y: [Math.floor(Math.min(...ys) - 1), Math.ceil(Math.max(...ys) + 1)] as [
+        number,
+        number,
+      ],
+    };
+  }, [themesData]);
 
-  const rawBreakouts = velocity?.breakout_queue ?? [];
-  const filteredBreakouts = brandId
-    ? rawBreakouts.filter((v) => matchesBrandFilter(v, brandId))
-    : rawBreakouts;
-  const predictedBreakoutCount =
-    velocity?.predicted_breakouts ??
-    filteredBreakouts.filter((v) => v.is_predicted_breakout).length;
+  const handleExportSosSov = () => {
+    if (!themesData || themesData.sos_sov.brands.length === 0) return;
+    const rows = themesData.sos_sov.brands.map((b) => ({
+      Market: themesData.sos_sov.country_name,
+      Brand: b.brand_name,
+      Role: b.brand_id === myBrandId ? "My Brand" : "Competitor",
+      "Ad Spend (USD)": b.spend_usd,
+      Impressions: b.impressions,
+      "SOS (%)": b.sos_pct.toFixed(1),
+      "SOV (%)": b.sov_pct.toFixed(1),
+      "SOV - SOS (pp)": b.efficiency_gap_pp.toFixed(1),
+      "Active Creatives": b.active_creatives,
+    }));
+    downloadObjectsAsCsv(
+      `market-share-sos-sov-${slugify(themesData.sos_sov.country_name)}.csv`,
+      rows
+    );
+    flashExported("sos");
+  };
 
-  const focusBrandForBreakout = brandId || myBrand;
-  const matchingBreakout =
-    filteredBreakouts.find(
-      (v) => v.is_predicted_breakout && matchesBrandFilter(v, focusBrandForBreakout)
-    ) ??
-    filteredBreakouts.find((v) => v.is_predicted_breakout) ??
-    filteredBreakouts[0];
+  const handleExportWearout = () => {
+    if (!themesData || themesData.themes_and_fatigue.fatigue_alerts.length === 0)
+      return;
+    const rows = themesData.themes_and_fatigue.fatigue_alerts.map((r) => ({
+      Market: themesData.sos_sov.country_name,
+      "Asset ID": r.asset_id,
+      "Short ID": `#${r.short_asset_id}`,
+      Brand: r.brand_name,
+      Channel: r.channel,
+      Theme: r.theme_label,
+      "Active Weeks": r.active_weeks,
+      "Peak Weekly Impressions": r.peak_weekly_impressions,
+      "Recent Weekly Impressions": r.recent_weekly_impressions,
+      "Decay (%)": r.decay_pct.toFixed(1),
+      "Wearout Score": r.wearout_score,
+      "Weekly Spend at Risk (USD)": r.weekly_spend_at_risk_usd,
+      Status: r.status,
+    }));
+    downloadObjectsAsCsv(
+      `creative-wearout-queue-${slugify(themesData.sos_sov.country_name)}-${brandFilter}.csv`,
+      rows
+    );
+    flashExported("wearout");
+  };
 
-  const fatiguedAds = fatigueList.filter((f) => f.is_fatigued);
-  const fatiguedSpend = fatiguedAds.reduce((acc, f) => acc + f.spend_usd, 0);
-  const topFatigued = fatiguedAds[0] ?? fatigueList[0];
+  const handleExportYoutube = () => {
+    if (filteredBreakouts.length === 0) return;
+    const rows = filteredBreakouts.map((r) => ({
+      "Video ID": r.video_id,
+      "Sub-Brand": r.sub_brand_label,
+      Channel: r.channel_name,
+      Title: r.title,
+      Theme: r.theme_label,
+      Market: r.country,
+      "7d Views": r.views_7d,
+      "Velocity Multiplier": r.velocity_multiplier.toFixed(1),
+      "Breakout Probability (%)": Math.round(r.breakout_probability * 100),
+      "Published Days Ago": r.published_days_ago,
+      "Predicted Breakout": r.predicted_breakout,
+    }));
+    downloadObjectsAsCsv(`youtube-breakout-alerts-${brandFilter}.csv`, rows);
+    flashExported("youtube");
+  };
+
+  const gridStroke = theme === "dark" ? "#27272a" : "#e4e4e7";
+  const tickFill = theme === "dark" ? "#a1a1aa" : "#52525b";
 
   return (
-    <>
-      <div className="page-header">
+    <div className="space-y-6">
+      {/* Header & Filter Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="page-title">2. Market Share, Creative Themes &amp; Wearout</h1>
-          <p className="page-subtitle">
-            Benchmark <strong>{myBrand} (My Brand)</strong> against EU automotive competitors on spend vs. voice share, messaging whitespace, creative wearout, and organic YouTube velocity.
+          <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+            Market Share & Creative Themes
+          </h2>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+            EU automotive Share of Spend vs. Share of Voice, UMAP creative
+            clusters, wearout queue, and YouTube breakouts.
           </p>
         </div>
 
-        <form className="form-row" onSubmit={(e) => e.preventDefault()}>
-          <div className="field">
-            <label htmlFor="themes-country">Market</label>
-            <select
-              id="themes-country"
-              name="country"
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Market selector */}
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="themes-market-select"
+              className="text-xs font-medium text-zinc-500 dark:text-zinc-400 whitespace-nowrap"
             >
-              {COUNTRIES.map((c) => (
+              Market
+            </label>
+            <select
+              id="themes-market-select"
+              value={country}
+              onChange={(e) => setCountry(e.target.value as CountryName)}
+              className="h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 text-xs font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
+            >
+              {COUNTRY_LIST.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
               ))}
             </select>
           </div>
-          <div className="field">
-            <label htmlFor="themes-brand">Brand Filter</label>
-            <select
-              id="themes-brand"
-              name="brand_id"
-              value={brandId}
-              onChange={(e) => setBrandId(e.target.value)}
+
+          {/* Brand Filter */}
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="themes-brand-select"
+              className="text-xs font-medium text-zinc-500 dark:text-zinc-400 whitespace-nowrap"
             >
-              {BRAND_FILTERS.map((b) => (
-                <option key={b || "all"} value={b}>
-                  {!b
-                    ? "All EU Auto Brands (My Brand vs. Competitors)"
-                    : `${b} (${b === myBrand ? "My Brand" : "Competitor"})`}
+              Brand Filter
+            </label>
+            <select
+              id="themes-brand-select"
+              value={brandFilter}
+              onChange={(e) =>
+                setBrandFilter(e.target.value as BrandFilterValue)
+              }
+              className="h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 text-xs font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
+            >
+              <option value="all">All EU Auto Brands</option>
+              {BRAND_LIST.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name} ({b.id === myBrandId ? "My Brand" : "Competitor"})
                 </option>
               ))}
             </select>
           </div>
-        </form>
+        </div>
       </div>
 
-      {error && (
-        <div role="alert" className="banner banner-danger">
-          <span aria-hidden="true">!</span>
-          <span>Failed to load market &amp; theme data: {error}</span>
+      {errorMsg && (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-300"
+        >
+          Failed to load themes data: {errorMsg}
         </div>
       )}
 
-      {loading && <p role="status">Loading market share, creative themes, and YouTube momentum...</p>}
+      {/* 3-Card Decision Brief */}
+      <section
+        aria-label="Decision Brief"
+        className="grid grid-cols-1 lg:grid-cols-3 gap-4"
+      >
+        {loading && !themesData
+          ? [0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="h-32 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 animate-pulse"
+              />
+            ))
+          : decisionBrief.map((card) => {
+              const metricColor =
+                card.tone === "emerald"
+                  ? "text-emerald-700 dark:text-emerald-400"
+                  : card.tone === "rose"
+                    ? "text-rose-700 dark:text-rose-400"
+                    : "text-amber-700 dark:text-amber-400";
+              return (
+                <div
+                  key={card.id}
+                  className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-4 flex flex-col justify-between gap-3"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="font-medium text-zinc-500 dark:text-zinc-400">
+                        {card.title}
+                      </span>
+                      <span
+                        className={`font-mono font-medium tabular-nums ${metricColor}`}
+                      >
+                        {card.metricValue}
+                      </span>
+                    </div>
+                    <div className="mt-1.5 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      {card.headline}
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+                      {card.detail}
+                    </p>
+                  </div>
+                  <div className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                    {card.metricLabel}
+                  </div>
+                </div>
+              );
+            })}
+      </section>
 
-      {data && sos && tf && (
-        <>
-          <section className="kpi-grid" aria-label="Market & Theme KPIs">
-            <article className="kpi-card">
-              <p className="kpi-label">Total Market Ad Spend</p>
-              <p className="kpi-value">{fmtUsd(sos.total_spend_usd)}</p>
-              <p className="kpi-note">{fmtCompact(sos.total_impressions)} paid impressions</p>
-            </article>
-            <article className="kpi-card">
-              <p className="kpi-label">Human-Verified Ad Accuracy</p>
-              <p className="kpi-value">{sos.audit_coverage_pct.toFixed(1)}%</p>
-              <p className="kpi-note">
-                <Link href="/creatives">Inspect &amp; correct tags in Step 3 &rarr;</Link>
+      {/* SOS vs SOV Comparison Chart + Ranked Brand Table */}
+      {themesData && (
+        <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-5 space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                Share of Spend (SOS) vs. Share of Voice (SOV) —{" "}
+                {themesData.sos_sov.country_name}
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 font-mono tabular-nums">
+                Total Spend{" "}
+                {formatCurrency(themesData.sos_sov.total_spend_usd, true)} ·{" "}
+                {formatCompactNumber(themesData.sos_sov.total_impressions)}{" "}
+                impressions ·{" "}
+                {themesData.sos_sov.audit_coverage_pct.toFixed(1)}% audit
+                coverage
               </p>
-            </article>
-            <article className="kpi-card">
-              <p className="kpi-label">Messaging Competition</p>
-              <p className="kpi-value">{tf.hhi_concentration || "Competitive"}</p>
-              <p className="kpi-note">{themesList.length} active creative themes across brands</p>
-            </article>
-            <article className="kpi-card">
-              <p className="kpi-label">Ads Needing Refresh (&ge;8w)</p>
-              <p className="kpi-value">{fatiguedAds.length}</p>
-              <p className="kpi-note">Out of {fatigueList.length} top monitored ads</p>
-            </article>
-          </section>
-
-          <section className="panel" aria-labelledby="decision-brief-heading">
-            <h2 id="decision-brief-heading" className="panel-title">
-              Recommended Next Actions (Decision Brief for {myBrand})
-            </h2>
-            <div className="card-grid">
-              <article className="kpi-card">
-                <p className="kpi-label">1. Paid Efficiency Diagnosis</p>
-                <p style={{ marginBlockStart: "0.35rem", marginBlockEnd: "0.65rem", fontSize: "0.92rem" }}>
-                  {!brandId ? (
-                    myBrandRow ? (
-                      <>
-                        <strong>All-Brands Market View:</strong>{" "}
-                        <strong>{myBrand} (My Brand)</strong> captures{" "}
-                        <strong>{myBrandRow.sov_pct.toFixed(1)}%</strong> voice share vs.{" "}
-                        <strong>{myBrandRow.sos_pct.toFixed(1)}%</strong> spend share (
-                        <strong>
-                          {myVoiceGap >= 0 ? "+" : ""}
-                          {myVoiceGap.toFixed(1)} pts
-                        </strong>{" "}
-                        efficiency gap)
-                        {topCompetitorRow ? (
-                          <>
-                            {" "}
-                            against top competitor <strong>{topCompetitorRow.brand_id}</strong> (
-                            <strong>{topCompetitorRow.sov_pct.toFixed(1)}%</strong> voice vs.{" "}
-                            <strong>{topCompetitorRow.sos_pct.toFixed(1)}%</strong> spend in{" "}
-                            {sos.country_name})
-                          </>
-                        ) : (
-                          ` in ${sos.country_name}`
-                        )}
-                        .
-                      </>
-                    ) : (
-                      `No ${myBrand} share metrics available for ${sos.country_name}.`
-                    )
-                  ) : selectedBrandRow ? (
-                    selectedBrandRow.brand_id === myBrand ? (
-                      <>
-                        <strong>{selectedBrandRow.brand_id} (My Brand)</strong> captures{" "}
-                        <strong>{selectedBrandRow.sov_pct.toFixed(1)}%</strong> voice share vs.{" "}
-                        <strong>{selectedBrandRow.sos_pct.toFixed(1)}%</strong> spend share (
-                        <strong>
-                          {selectedGap >= 0 ? "+" : ""}
-                          {selectedGap.toFixed(1)} pts
-                        </strong>{" "}
-                        efficiency gap in {sos.country_name}).
-                      </>
-                    ) : (
-                      <>
-                        <strong>{selectedBrandRow.brand_id} (Competitor)</strong> captures{" "}
-                        <strong>{selectedBrandRow.sov_pct.toFixed(1)}%</strong> voice share vs.{" "}
-                        <strong>{selectedBrandRow.sos_pct.toFixed(1)}%</strong> spend share (
-                        <strong>
-                          {selectedGap >= 0 ? "+" : ""}
-                          {selectedGap.toFixed(1)} pts
-                        </strong>{" "}
-                        gap)
-                        {myBrandRow
-                          ? ` compared with ${myBrand} (My Brand) at ${myBrandRow.sov_pct.toFixed(1)}% voice share`
-                          : ""}{" "}
-                        in {sos.country_name}.
-                      </>
-                    )
-                  ) : (
-                    "No brand share metrics available for this filter."
-                  )}
-                </p>
-                <Link href="/mmm" className="btn">
-                  Reallocate {myBrand} Budget in Step 4 &rarr;
-                </Link>
-              </article>
-
-              <article className="kpi-card">
-                <p className="kpi-label">2. Creative Whitespace &amp; Organic Hook</p>
-                <p style={{ marginBlockStart: "0.35rem", marginBlockEnd: "0.65rem", fontSize: "0.92rem" }}>
-                  {whitespaceTheme ? (
-                    <>
-                      <strong>{whitespaceTheme.theme_label}</strong> (
-                      {whitespaceTheme.scope === "brand_exclusive_whitespace"
-                        ? "Uncontested Angle"
-                        : "Top Active Theme"}
-                      , {whitespaceTheme.share_pct.toFixed(1)}% category spend).
-                    </>
-                  ) : (
-                    "No creative themes loaded."
-                  )}
-                  {matchingBreakout && (
-                    <>
-                      {" "}
-                      Organic breakout on <strong>{matchingBreakout.channel_title}</strong>:{" "}
-                      &ldquo;{matchingBreakout.title}&rdquo; (
-                      {(matchingBreakout.breakout_prob * 100).toFixed(0)}% breakout likelihood).
-                    </>
-                  )}
-                </p>
-                <Link
-                  href={`/creatives${brandId ? `?brand_id=${encodeURIComponent(brandId)}` : ""}`}
-                  className="btn"
-                >
-                  Inspect Creative Hooks in Step 3 &rarr;
-                </Link>
-              </article>
-
-              <article className="kpi-card">
-                <p className="kpi-label">3. Urgent Creative Refresh Queue</p>
-                <p style={{ marginBlockStart: "0.35rem", marginBlockEnd: "0.65rem", fontSize: "0.92rem" }}>
-                  <strong>{fatiguedAds.length}</strong> ads show severe wearout (&ge;8w active, &le;55%
-                  of peak impressions) representing <strong>{fmtUsd(fatiguedSpend)}</strong> in
-                  tracked spend.
-                </p>
-                <Link
-                  href={
-                    topFatigued
-                      ? `/creatives?asset_id=${encodeURIComponent(
-                          topFatigued.asset_id
-                        )}&brand_id=${encodeURIComponent(
-                          topFatigued.focal_brand_id || topFatigued.brand_id
-                        )}`
-                      : "/creatives"
-                  }
-                  className="btn btn-primary"
-                >
-                  Review Top Worn-Out Ad (
-                  {topFatigued ? `#${topFatigued.short_asset_id || topFatigued.asset_id}` : "Queue"}
-                  ) &rarr;
-                </Link>
-              </article>
             </div>
-          </section>
-
-          <section className="panel" aria-labelledby="sos-table-heading">
-            <div className="page-header" style={{ marginBlockEnd: "0.75rem" }}>
-              <div>
-                <h2 id="sos-table-heading" className="panel-title" style={{ margin: 0 }}>
-                  Brand Share of Spend vs. Share of Voice ({sos.country_name})
-                </h2>
-                <p className="kpi-note" style={{ marginBlockStart: "0.2rem" }}>
-                  Comparing <strong>{myBrand} (My Brand)</strong> against competitors
-                  {brandId ? ` · lower theme, wearout, and YouTube tables filtered to ${brandId}.` : "."}
-                </p>
-              </div>
-              <Link href="/mmm" className="btn">
-                Plan {myBrand} Budget in Step 4 &rarr;
-              </Link>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleExportSosSov}
+                disabled={themesData.sos_sov.brands.length === 0}
+                aria-label="Download CSV for Market Share table"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 disabled:opacity-50 dark:text-zinc-200 dark:hover:bg-zinc-800 transition-colors whitespace-nowrap shrink-0"
+              >
+                {exportedTable === "sos" ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+                <span>
+                  {exportedTable === "sos" ? "Exported" : "Download CSV"}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/mmm")}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3.5 py-2 text-xs font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-200 transition-colors whitespace-nowrap shrink-0"
+              >
+                <span>Plan Budget</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
             </div>
-            <div tabIndex={0} role="region" aria-labelledby="sos-table-heading" className="table-wrapper responsive-stack">
-              <table>
-                <caption>{sos.country_name} brand share of spend, voice, and human verification coverage</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Brand</th>
-                    <th scope="col">Ad Spend</th>
-                    <th scope="col">Spend Share</th>
-                    <th scope="col">Impressions</th>
-                    <th scope="col">Voice Share</th>
-                    <th scope="col">Verified %</th>
-                    <th scope="col">Manual Corrections</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sos.brands.map((b) => {
-                    const isMyBrand = b.brand_id === myBrand;
-                    const isFiltered = Boolean(brandId && b.brand_id === brandId);
-                    const rowBg = isMyBrand || isFiltered ? "rgba(37, 99, 235, 0.10)" : undefined;
-                    return (
-                      <tr key={b.brand_id} style={rowBg ? { background: rowBg } : undefined}>
-                        <th scope="row" style={rowBg ? { background: "var(--surface-alt)" } : undefined}>
-                          {b.brand_id}
-                          <span
-                            className={`badge ${isMyBrand ? "badge-ok" : ""}`}
-                            style={{ marginInlineStart: "0.45rem" }}
-                          >
-                            {isMyBrand ? "My Brand" : "Competitor"}
-                          </span>
-                          {isFiltered && !isMyBrand && (
-                            <span className="badge badge-warn" style={{ marginInlineStart: "0.35rem" }}>
-                              Filtered
-                            </span>
-                          )}
-                        </th>
-                        <td data-label="Ad Spend">{fmtUsd(b.total_spend_usd)}</td>
-                        <td data-label="Spend Share">{b.sos_pct.toFixed(2)}%</td>
-                        <td data-label="Impressions">{fmtCompact(b.total_impressions)}</td>
-                        <td data-label="Voice Share">{b.sov_pct.toFixed(2)}%</td>
-                        <td data-label="Verified %">{b.audit_coverage_pct.toFixed(1)}%</td>
-                        <td data-label="Manual Corrections">{b.overridden_assets}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <div className="card-grid">
-            <section className="panel" aria-labelledby="battleground-heading">
-              <h2 id="battleground-heading" className="panel-title">
-                Crowded Topics vs. Uncontested Whitespace
-              </h2>
-              <div tabIndex={0} role="region" aria-labelledby="battleground-heading" className="table-wrapper">
-                <table>
-                  <caption>Active creative messaging themes ordered by ad spend</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Theme</th>
-                      <th scope="col">Positioning</th>
-                      <th scope="col">{myBrand} Stance</th>
-                      <th scope="col">Brands Active</th>
-                      <th scope="col">Ad Spend</th>
-                      <th scope="col">Share</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {themesList.map((t) => {
-                      const myBrandActive = t.brands.includes(myBrand);
-                      return (
-                        <tr key={t.theme_id}>
-                          <th scope="row">{t.theme_label}</th>
-                          <td>
-                            <span className={`badge ${t.scope === "brand_exclusive_whitespace" ? "badge-ok" : "badge-warn"}`}>
-                              {t.scope === "brand_exclusive_whitespace" ? "Uncontested Angle" : "Crowded Topic"}
-                            </span>
-                          </td>
-                          <td>
-                            <span className={`badge ${myBrandActive ? "badge-ok" : "badge-warn"}`}>
-                              {myBrandActive ? "My Brand Active" : "Competitor Only"}
-                            </span>
-                          </td>
-                          <td>{t.brands.join(", ")}</td>
-                          <td>{fmtUsd(t.spend_usd)}</td>
-                          <td>{t.share_pct.toFixed(1)}%</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="panel" aria-labelledby="umap-heading">
-              <h2 id="umap-heading" className="panel-title">
-                Creative Messaging Map ({scatterPoints.length} ads)
-              </h2>
-              <ThemeScatterSvg points={scatterPoints} />
-            </section>
           </div>
 
-          <section className="panel" aria-labelledby="fatigue-heading">
-            <h2 id="fatigue-heading" className="panel-title">
-              Creative Wearout &amp; Refresh Queue ({fatigueList.length} monitored ads)
-            </h2>
-            <p className="kpi-note" style={{ marginBlockEnd: "0.75rem" }}>
-              Ads running 8+ weeks whose recent weekly impressions dropped by &ge;45% vs peak are flagged for creative refresh in Step 3.
-            </p>
-            <div tabIndex={0} role="region" aria-labelledby="fatigue-heading" className="table-wrapper responsive-stack">
-              <table>
-                <caption>Top monitored ads ranked by wearout severity and ad spend</caption>
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+            <div className="xl:col-span-5 space-y-2">
+              <div className="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+                <span className="inline-flex items-center gap-1.5">
+                  <span
+                    className="h-2.5 w-2.5 rounded-xs bg-zinc-600 dark:bg-zinc-400"
+                    aria-hidden="true"
+                  />
+                  <span>Share of Spend (SOS)</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span
+                    className="h-2.5 w-2.5 rounded-xs bg-blue-600"
+                    aria-hidden="true"
+                  />
+                  <span>Share of Voice (SOV)</span>
+                </span>
+              </div>
+              <div className="h-[240px] w-full">
+                {chartsReady ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={themesData.sos_sov.brands}
+                      margin={{ top: 8, right: 12, left: -12, bottom: 0 }}
+                    >
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke={gridStroke}
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="brand_name"
+                        tick={{ fill: tickFill, fontSize: 12 }}
+                        axisLine={{ stroke: gridStroke }}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        unit="%"
+                        tick={{ fill: tickFill, fontSize: 11 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor:
+                            theme === "dark" ? "#18181b" : "#ffffff",
+                          borderColor:
+                            theme === "dark" ? "#3f3f46" : "#e4e4e7",
+                          borderRadius: "8px",
+                          fontSize: "12px",
+                        }}
+                        formatter={(val: unknown, name: unknown) => [
+                          `${Number(val).toFixed(1)}%`,
+                          String(name),
+                        ]}
+                      />
+                      <Bar
+                        dataKey="sos_pct"
+                        name="Share of Spend (%)"
+                        fill={theme === "dark" ? "#a1a1aa" : "#52525b"}
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={28}
+                      />
+                      <Bar
+                        dataKey="sov_pct"
+                        name="Share of Voice (%)"
+                        fill="#2563eb"
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={28}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full w-full rounded-lg bg-zinc-100 dark:bg-zinc-900 animate-pulse" />
+                )}
+              </div>
+            </div>
+
+            <div className="xl:col-span-7 overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr>
-                    <th scope="col">Ad ID</th>
-                    <th scope="col">Brand &amp; Channel</th>
-                    <th scope="col">Theme</th>
-                    <th scope="col" style={{ whiteSpace: "nowrap" }}>Active Span</th>
-                    <th scope="col">Recent vs. Peak Impressions</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Action</th>
+                  <tr className="border-b border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400">
+                    <th className="py-2 pr-3 font-medium">Brand</th>
+                    <th className="py-2 px-3 font-medium text-right">
+                      Ad Spend
+                    </th>
+                    <th className="py-2 px-3 font-medium text-right">SOS %</th>
+                    <th className="py-2 px-3 font-medium text-right">SOV %</th>
+                    <th className="py-2 px-3 font-medium text-right">
+                      SOV − SOS
+                    </th>
+                    <th className="py-2 pl-3 font-medium text-right">Action</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {fatigueList.map((f) => {
-                    const decayPct = ((f.impression_decay_ratio ?? Math.max(0, 1 - f.wearout_score)) * 100).toFixed(0);
-                    const focalBrand = f.focal_brand_id || f.brand_id;
-                    const isMyBrandAd = focalBrand === myBrand;
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+                  {themesData.sos_sov.brands.map((row) => {
+                    const isMine = row.brand_id === myBrandId;
+                    const gapPositive = row.efficiency_gap_pp >= 0;
                     return (
-                      <tr key={`${f.asset_id}-${focalBrand}-${f.channel_group}`}>
-                        <th scope="row">
-                          <span className="id-pill" title={f.asset_id}>
-                            #{f.short_asset_id || f.asset_id}
-                          </span>
-                        </th>
-                        <td data-label="Brand & Channel">
-                          <strong>{focalBrand}</strong>{" "}
-                          <span className={`badge ${isMyBrandAd ? "badge-ok" : ""}`}>
-                            {isMyBrandAd ? "My Brand" : "Competitor"}
-                          </span>{" "}
-                          &middot; {f.channel_group}
-                        </td>
-                        <td data-label="Theme">{f.theme_label || "Unclustered"}</td>
-                        <td data-label="Active Span">
-                          {f.span_weeks ?? f.active_weeks}w span ({f.active_weeks}w live)
-                        </td>
-                        <td data-label="Impression Decay">
-                          <strong>{decayPct}% of peak</strong>
-                          {f.peak_weekly_impressions !== undefined && f.recent_weekly_impressions !== undefined && (
-                            <span className="kpi-note" style={{ display: "block", margin: 0 }}>
-                              {fmtCompact(f.recent_weekly_impressions)} recent / {fmtCompact(f.peak_weekly_impressions)} peak
+                      <tr
+                        key={row.brand_id}
+                        className={
+                          isMine
+                            ? "bg-zinc-50 dark:bg-zinc-800/40"
+                            : "hover:bg-zinc-50/70 dark:hover:bg-zinc-900/50"
+                        }
+                      >
+                        <td className="py-2.5 pr-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                              {row.brand_name}
                             </span>
+                            <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                              {isMine ? "My Brand" : "Competitor"}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">
+                          {formatCurrency(row.spend_usd, true)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">
+                          {row.sos_pct.toFixed(1)}%
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums font-medium text-zinc-900 dark:text-zinc-100">
+                          {row.sov_pct.toFixed(1)}%
+                        </td>
+                        <td
+                          className={`py-2.5 px-3 text-right font-mono tabular-nums font-medium ${
+                            gapPositive
+                              ? "text-emerald-700 dark:text-emerald-400"
+                              : "text-rose-700 dark:text-rose-400"
+                          }`}
+                        >
+                          {gapPositive ? "+" : ""}
+                          {row.efficiency_gap_pp.toFixed(1)} pp
+                        </td>
+                        <td className="py-2.5 pl-3 text-right">
+                          {isMine ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate("/mmm")}
+                              className="font-medium text-zinc-900 hover:underline dark:text-zinc-100 whitespace-nowrap"
+                            >
+                              Plan Budget →
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                navigate(`/creatives?brand_id=${row.brand_id}`)
+                              }
+                              className="text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 whitespace-nowrap"
+                            >
+                              Inspect Ads →
+                            </button>
                           )}
-                        </td>
-                        <td data-label="Status">
-                          <span className={`badge ${f.is_fatigued ? "badge-danger" : "badge-ok"}`}>
-                            {f.is_fatigued ? "Refresh Needed" : "Healthy"}
-                          </span>
-                        </td>
-                        <td data-label="Action">
-                          <Link
-                            href={`/creatives?asset_id=${encodeURIComponent(
-                              f.asset_id
-                            )}&brand_id=${encodeURIComponent(focalBrand)}`}
-                            className="btn"
-                          >
-                            Review Ad &rarr;
-                          </Link>
                         </td>
                       </tr>
                     );
@@ -515,228 +577,450 @@ export default function ThemesPage() {
                 </tbody>
               </table>
             </div>
-          </section>
+          </div>
+        </section>
+      )}
 
-          {velocity && (
-            <section id="youtube-momentum" className="panel" aria-labelledby="yt-momentum-heading">
-              <div className="page-header" style={{ marginBlockEnd: "0.75rem" }}>
-                <div>
-                  <h2 id="yt-momentum-heading" className="panel-title" style={{ margin: 0 }}>
-                    EU Automotive Organic YouTube Breakout Momentum ({predictedBreakoutCount} breakouts{brandId ? ` \u00b7 ${brandId}` : ""})
-                  </h2>
-                  <p className="kpi-note" style={{ marginBlockStart: "0.2rem" }}>
-                    Organic brand-channel video velocity vs. each channel&apos;s own 30-day average — useful context alongside paid themes.
-                  </p>
-                </div>
-                <Link href="/velocity" className="btn">
-                  Open System Health &amp; Drift &rarr;
-                </Link>
-              </div>
-              <div tabIndex={0} role="region" aria-labelledby="yt-momentum-heading" className="table-wrapper responsive-stack">
-                <table>
-                  <caption>Latest EU Automotive YouTube uploads ranked by breakout probability</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Channel</th>
-                      <th scope="col">Video Title</th>
-                      <th scope="col">Format</th>
-                      <th scope="col">Breakout Likelihood</th>
-                      <th scope="col">7d Upload Pace</th>
-                      <th scope="col">30d Avg Views</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredBreakouts.length === 0 ? (
-                      <tr>
-                        <td colSpan={6}>
-                          No organic YouTube videos found for {brandId || "the active filter"}.
+      {/* Interactive Creative Theme Map (Recharts ScatterChart) */}
+      {themesData && (
+        <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                Creative Theme Map (UMAP Embedding)
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                Hover any creative point for brand, theme, media format, and
+                asset ID. Filter clusters below.
+              </p>
+            </div>
+            {activeThemeHighlight && (
+              <button
+                type="button"
+                onClick={() => setActiveThemeHighlight(null)}
+                className="text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 underline"
+              >
+                Show all themes
+              </button>
+            )}
+          </div>
+
+          {/* Interactive Theme Filter Buttons */}
+          <div className="flex flex-wrap gap-2">
+            {themesData.themes_and_fatigue.themes.map((t) => {
+              const selected = activeThemeHighlight === t.theme_label;
+              return (
+                <button
+                  key={t.theme_id}
+                  type="button"
+                  onClick={() =>
+                    setActiveThemeHighlight(selected ? null : t.theme_label)
+                  }
+                  className={`inline-flex items-center gap-2 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
+                    selected
+                      ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
+                      : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
+                  }`}
+                >
+                  <span
+                    className="h-2.5 w-2.5 rounded-xs shrink-0"
+                    style={{ backgroundColor: t.color }}
+                    aria-hidden="true"
+                  />
+                  <span>{t.theme_label}</span>
+                  <span className="font-mono text-[11px] opacity-75 tabular-nums">
+                    {t.share_of_spend_pct.toFixed(0)}%
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="h-[310px] w-full">
+            {chartsReady ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <ScatterChart
+                  margin={{ top: 12, right: 18, bottom: 12, left: -8 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                  <XAxis
+                    type="number"
+                    dataKey="umap_x"
+                    name="UMAP X"
+                    domain={scatterBounds.x}
+                    tick={{ fill: tickFill, fontSize: 11 }}
+                    axisLine={{ stroke: gridStroke }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    type="number"
+                    dataKey="umap_y"
+                    name="UMAP Y"
+                    domain={scatterBounds.y}
+                    tick={{ fill: tickFill, fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <ZAxis
+                    type="number"
+                    dataKey="spend_usd"
+                    range={[55, 160]}
+                    name="Creative"
+                  />
+                  <Tooltip
+                    content={<ScatterTooltip />}
+                    cursor={{ strokeDasharray: "3 3" }}
+                  />
+                  {scatterByTheme.map(([themeLabel, group]) => (
+                    <Scatter
+                      key={themeLabel}
+                      name={themeLabel}
+                      data={group.points}
+                      fill={group.color}
+                      fillOpacity={0.85}
+                    />
+                  ))}
+                </ScatterChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full w-full rounded-lg bg-zinc-100 dark:bg-zinc-900 animate-pulse" />
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Full-Width Creative Wearout & Refresh Queue */}
+      {themesData && (
+        <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 overflow-hidden">
+          <div className="px-5 py-4 border-b border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                Creative Wearout & Refresh Queue
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                Ranked by weekly impression decay and wearout score. Jump
+                directly into creative review to inspect hooks or apply HITL
+                overrides.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="text-xs font-mono tabular-nums text-zinc-500 dark:text-zinc-400">
+                {themesData.themes_and_fatigue.fatigue_alerts.length} ads in
+                queue
+              </span>
+              <button
+                type="button"
+                onClick={handleExportWearout}
+                disabled={
+                  themesData.themes_and_fatigue.fatigue_alerts.length === 0
+                }
+                aria-label="Download CSV for Creative Wearout Queue"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 disabled:opacity-50 dark:text-zinc-200 dark:hover:bg-zinc-800 transition-colors whitespace-nowrap shrink-0"
+              >
+                {exportedTable === "wearout" ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+                <span>
+                  {exportedTable === "wearout" ? "Exported" : "Download CSV"}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40 text-zinc-500 dark:text-zinc-400">
+                  <th className="py-2.5 px-4 font-medium">Asset</th>
+                  <th className="py-2.5 px-3 font-medium">Brand</th>
+                  <th className="py-2.5 px-3 font-medium">Channel</th>
+                  <th className="py-2.5 px-3 font-medium">Theme</th>
+                  <th className="py-2.5 px-3 font-medium text-right">Weeks</th>
+                  <th className="py-2.5 px-3 font-medium text-right">
+                    Peak → Recent / wk
+                  </th>
+                  <th className="py-2.5 px-3 font-medium text-right">Decay</th>
+                  <th className="py-2.5 px-3 font-medium text-right">
+                    Wearout
+                  </th>
+                  <th className="py-2.5 px-3 font-medium">Status</th>
+                  <th className="py-2.5 px-4 font-medium text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+                {themesData.themes_and_fatigue.fatigue_alerts.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={10}
+                      className="py-8 text-center text-zinc-500 dark:text-zinc-400"
+                    >
+                      No fatigued creatives match the current brand filter.
+                    </td>
+                  </tr>
+                ) : (
+                  themesData.themes_and_fatigue.fatigue_alerts.map((row) => {
+                    const statusStyle =
+                      row.status === "critical"
+                        ? "text-rose-700 bg-rose-50 border-rose-200 dark:text-rose-300 dark:bg-rose-950/50 dark:border-rose-900/60"
+                        : row.status === "warning"
+                          ? "text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-300 dark:bg-amber-950/50 dark:border-amber-900/60"
+                          : "text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-300 dark:bg-emerald-950/50 dark:border-emerald-900/60";
+                    const statusLabel =
+                      row.status === "critical"
+                        ? "Critical"
+                        : row.status === "warning"
+                          ? "Warning"
+                          : "Healthy";
+
+                    return (
+                      <tr
+                        key={`${row.asset_id}-${row.channel}`}
+                        className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
+                      >
+                        <td className="py-2.5 px-4 font-mono tabular-nums text-zinc-800 dark:text-zinc-200 whitespace-nowrap">
+                          #{row.short_asset_id}
+                        </td>
+                        <td className="py-2.5 px-3 font-medium text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
+                          {row.brand_name}
+                        </td>
+                        <td className="py-2.5 px-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
+                          {row.channel}
+                        </td>
+                        <td className="py-2.5 px-3 text-zinc-700 dark:text-zinc-300 max-w-[220px] truncate">
+                          {row.theme_label}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-zinc-600 dark:text-zinc-400">
+                          {row.active_weeks}w
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
+                          {formatCompactNumber(row.peak_weekly_impressions)} →{" "}
+                          {formatCompactNumber(row.recent_weekly_impressions)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-rose-700 dark:text-rose-400 whitespace-nowrap">
+                          {row.decay_pct.toFixed(1)}%
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums font-medium text-zinc-900 dark:text-zinc-100">
+                          {row.wearout_score}
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <span
+                            className={`inline-block rounded-md border px-2 py-0.5 text-[11px] font-medium ${statusStyle}`}
+                          >
+                            {statusLabel}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-4 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              navigate(
+                                `/creatives?brand_id=${row.brand_id}&asset_id=${encodeURIComponent(row.asset_id)}`
+                              )
+                            }
+                            className="font-medium text-zinc-900 hover:underline dark:text-zinc-100"
+                          >
+                            Review Ad →
+                          </button>
                         </td>
                       </tr>
-                    ) : (
-                      filteredBreakouts.map((v) => {
-                        const isMyBrandChannel = matchesBrandFilter(v, myBrand);
-                        return (
-                          <tr key={v.video_id}>
-                            <th scope="row">
-                              {v.channel_title}{" "}
-                              <span className={`badge ${isMyBrandChannel ? "badge-ok" : ""}`}>
-                                {isMyBrandChannel ? "My Brand" : "Competitor"}
-                              </span>
-                            </th>
-                            <td data-label="Video Title">{v.title || v.video_id}</td>
-                            <td data-label="Format">{v.is_short ? "Short" : "Long-form"}</td>
-                            <td data-label="Breakout Likelihood">
-                              <span className={`badge ${v.is_predicted_breakout ? "badge-warn" : ""}`}>
-                                {(v.breakout_prob * 100).toFixed(0)}% {v.is_predicted_breakout ? "Breakout" : "Steady"}
-                              </span>
-                            </td>
-                            <td data-label="7d Upload Pace">{v.channel_upload_blitz_7d} uploads</td>
-                            <td data-label="30d Avg Views">{fmtCompact(v.channel_historical_avg_views_30d)}</td>
-                          </tr>
-                        );
-                      })
-                    )}
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* Organic YouTube Breakout Alerts */}
+      <section
+        id="youtube-momentum"
+        className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 overflow-hidden"
+      >
+        <div className="px-5 py-4 border-b border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              Organic YouTube Breakout Alerts
+            </h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+              Includes OEM sub-brand channels (BMW M, BMW i, Mercedes-AMG,
+              Mercedes-EQ, Audi Sport, Porsche Motorsport).
+            </p>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="text-xs font-mono tabular-nums text-zinc-500 dark:text-zinc-400">
+              {filteredBreakouts.length} matching signals
+            </span>
+            <button
+              type="button"
+              onClick={handleExportYoutube}
+              disabled={filteredBreakouts.length === 0}
+              aria-label="Download CSV for YouTube Breakout Alerts"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 disabled:opacity-50 dark:text-zinc-200 dark:hover:bg-zinc-800 transition-colors whitespace-nowrap shrink-0"
+            >
+              {exportedTable === "youtube" ? (
+                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              <span>
+                {exportedTable === "youtube" ? "Exported" : "Download CSV"}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40 text-zinc-500 dark:text-zinc-400">
+                <th className="py-2.5 px-4 font-medium">Sub-Brand / Channel</th>
+                <th className="py-2.5 px-3 font-medium">Video Title</th>
+                <th className="py-2.5 px-3 font-medium">Format</th>
+                <th className="py-2.5 px-3 font-medium text-right">
+                  30d Avg Views
+                </th>
+                <th className="py-2.5 px-3 font-medium text-right">
+                  Signal / Thresh
+                </th>
+                <th className="py-2.5 px-4 font-medium text-right">
+                  Breakout Prob.
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+              {filteredBreakouts.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="py-8 text-center text-zinc-500 dark:text-zinc-400"
+                  >
+                    No YouTube breakout signals for the selected brand filter.
+                  </td>
+                </tr>
+              ) : (
+                filteredBreakouts.map((vid) => (
+                  <tr
+                    key={vid.video_id}
+                    className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
+                  >
+                    <td className="py-2.5 px-4 whitespace-nowrap">
+                      <div className="font-medium text-zinc-900 dark:text-zinc-100">
+                        {vid.sub_brand_label}
+                      </div>
+                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {vid.channel_name}
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-3 text-zinc-800 dark:text-zinc-200 max-w-[340px]">
+                      <div className="truncate font-medium">{vid.title}</div>
+                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {vid.country} · Published {vid.published_days_ago}d ago
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-3 text-zinc-600 dark:text-zinc-300 whitespace-nowrap">
+                      {vid.theme_label}
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">
+                      {formatCompactNumber(vid.views_7d)}
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono tabular-nums font-medium text-amber-700 dark:text-amber-400">
+                      {vid.velocity_multiplier.toFixed(1)}x
+                    </td>
+                    <td className="py-2.5 px-4 text-right font-mono tabular-nums text-emerald-700 dark:text-emerald-400">
+                      {Math.round(vid.breakout_probability * 100)}%
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Collapsible Technical Diagnostics Accordion */}
+      {themesData && (
+        <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 overflow-hidden">
+          <button
+            type="button"
+            aria-expanded={diagnosticsOpen}
+            onClick={() => setDiagnosticsOpen((o) => !o)}
+            className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-zinc-50 dark:hover:bg-zinc-900/80 transition-colors"
+          >
+            <div>
+              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                Technical Diagnostics
+              </span>
+              <span className="ml-3 text-xs text-zinc-500 dark:text-zinc-400 font-mono tabular-nums">
+                Category HHI: {themesData.themes_and_fatigue.category_hhi} (
+                {themesData.themes_and_fatigue.hhi_concentration}) · Pairwise
+                Jaccard Overlap
+              </span>
+            </div>
+            {diagnosticsOpen ? (
+              <ChevronUp className="h-4 w-4 text-zinc-500" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-zinc-500" />
+            )}
+          </button>
+
+          {diagnosticsOpen && (
+            <div className="px-5 py-4 border-t border-zinc-200 dark:border-zinc-800 grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="lg:col-span-4 space-y-2">
+                <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  Herfindahl-Hirschman Index (Category HHI)
+                </div>
+                <div className="text-2xl font-semibold font-mono tabular-nums text-zinc-900 dark:text-zinc-100">
+                  {themesData.themes_and_fatigue.category_hhi}
+                </div>
+                <div className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                  {themesData.themes_and_fatigue.hhi_concentration}
+                </div>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                  HHI above 2,500 signals high spend concentration among the top
+                  two OEMs in {themesData.sos_sov.country_name}; whitespace
+                  differentiation outperforms head-on spend escalation.
+                </p>
+              </div>
+
+              <div className="lg:col-span-8 overflow-x-auto">
+                <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">
+                  Jaccard Theme Overlap (Pairwise Brand Similarity)
+                </div>
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400">
+                      <th className="py-1.5 pr-3 font-medium">Brand Pair</th>
+                      <th className="py-1.5 px-3 font-medium text-right">
+                        Jaccard
+                      </th>
+                      <th className="py-1.5 pl-3 font-medium">Shared Themes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+                    {themesData.themes_and_fatigue.jaccard_overlaps.map((j) => (
+                      <tr key={`${j.brand_a}-${j.brand_b}`}>
+                        <td className="py-2 pr-3 font-medium text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
+                          {BRAND_CATALOG[j.brand_a]?.name ?? j.brand_a} ×{" "}
+                          {BRAND_CATALOG[j.brand_b]?.name ?? j.brand_b}
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono tabular-nums text-zinc-800 dark:text-zinc-200">
+                          {j.jaccard_index.toFixed(2)}
+                        </td>
+                        <td className="py-2 pl-3 text-zinc-500 dark:text-zinc-400">
+                          {j.shared_themes.join(" · ") || "None"}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
-            </section>
-          )}
-
-          <details className="panel diag-drawer">
-            <summary>
-              Technical Clustering &amp; Overlap Diagnostics (HHI {categoryHhi.toFixed(0)} &amp; Jaccard Brand Similarity)
-            </summary>
-            <p className="kpi-note" style={{ marginBlockEnd: "0.75rem" }}>
-              Herfindahl-Hirschman Index (HHI = {categoryHhi.toFixed(1)}, {tf.hhi_concentration || "Competitive"}) measures how heavily ad budgets concentrate into a few themes; Jaccard overlap measures shared theme sets between competitor pairs.
-            </p>
-            <div tabIndex={0} role="region" aria-label="Brand Theme Overlap Matrix" className="table-wrapper">
-              <table>
-                <caption>Pairwise brand creative theme overlap (Jaccard similarity)</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Brand Pair</th>
-                    <th scope="col">Similarity</th>
-                    <th scope="col">Shared Themes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {jaccardList.map((pair) => (
-                    <tr key={`${pair.brand_a}-${pair.brand_b}`}>
-                      <th scope="row">{pair.brand_a} &harr; {pair.brand_b}</th>
-                      <td>{pair.jaccard_similarity.toFixed(3)}</td>
-                      <td>{pair.shared_themes.join(", ") || "None"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
-          </details>
-        </>
+          )}
+        </section>
       )}
-    </>
-  );
-}
-
-function ThemeScatterSvg({ points }: { points: PortalThemesResponse["themes_and_fatigue"]["scatter_points"] }) {
-  if (!points.length) {
-    return <p className="page-subtitle">No 2D creative cluster coordinates available for the active filter.</p>;
-  }
-
-  const coords = points.map((p, idx) => ({
-    x: Number(p.umap_x ?? p.x ?? (idx % 7) - 3),
-    y: Number(p.umap_y ?? p.y ?? Math.floor(idx / 7) - 2),
-    brand: p.brand_id_raw || "Unknown",
-    label: p.theme_label || p.theme_id || "Cluster",
-  }));
-
-  const xs = coords.map((c) => c.x);
-  const ys = coords.map((c) => c.y);
-  const minX = Math.min(...xs) - 0.5;
-  const maxX = Math.max(...xs) + 0.5;
-  const minY = Math.min(...ys) - 0.5;
-  const maxY = Math.max(...ys) + 0.5;
-  const spanX = Math.max(1e-3, maxX - minX);
-  const spanY = Math.max(1e-3, maxY - minY);
-
-  const left = 58;
-  const right = 594;
-  const top = 20;
-  const bottom = 308;
-  const width = right - left;
-  const height = bottom - top;
-  const ticks = [0, 0.25, 0.5, 0.75, 1];
-  const seenCounts = new Map<string, number>();
-
-  const brandColors: Record<string, string> = {
-    BMW: "#2563eb",
-    "Mercedes-Benz": "#0d9488",
-    Audi: "#dc2626",
-    Porsche: "#d97706",
-  };
-
-  return (
-    <figure style={{ margin: 0 }}>
-      <svg
-        role="img"
-        aria-label="Creative Messaging Map scatter plot with labeled axes showing BMW, Mercedes-Benz, Audi, and Porsche ad clusters"
-        viewBox="0 0 640 360"
-        style={{
-          inlineSize: "100%",
-          blockSize: "auto",
-          border: "1px solid var(--border)",
-          borderRadius: "8px",
-          background: "var(--surface-alt)",
-        }}
-      >
-        {/* Gridlines & Numeric Ticks */}
-        {ticks.map((t) => {
-          const gx = left + t * width;
-          const gy = bottom - t * height;
-          const xVal = (minX + t * spanX).toFixed(1);
-          const yVal = (minY + t * spanY).toFixed(1);
-          return (
-            <g key={t}>
-              <line x1={gx} y1={top} x2={gx} y2={bottom} stroke="var(--border)" strokeDasharray="3 4" strokeWidth="1" />
-              <line x1={left} y1={gy} x2={right} y2={gy} stroke="var(--border)" strokeDasharray="3 4" strokeWidth="1" />
-              <text x={gx} y={bottom + 16} textAnchor="middle" fontSize="11" fill="var(--text-muted)">
-                {xVal}
-              </text>
-              <text x={left - 8} y={gy + 4} textAnchor="end" fontSize="11" fill="var(--text-muted)">
-                {yVal}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Primary Axes */}
-        <line x1={left} y1={bottom} x2={right} y2={bottom} stroke="var(--text-muted)" strokeWidth="1.5" />
-        <line x1={left} y1={top} x2={left} y2={bottom} stroke="var(--text-muted)" strokeWidth="1.5" />
-
-        {/* Axis Titles */}
-        <text x={(left + right) / 2} y={350} textAnchor="middle" fontSize="12" fontWeight="600" fill="var(--text)">
-          Creative Angle Axis 1 (Visual &amp; Copy Similarity)
-        </text>
-        <text
-          x={16}
-          y={(top + bottom) / 2}
-          textAnchor="middle"
-          fontSize="12"
-          fontWeight="600"
-          fill="var(--text)"
-          transform={`rotate(-90 16 ${(top + bottom) / 2})`}
-        >
-          Creative Style Axis 2 (Hook &amp; Pacing)
-        </text>
-
-        {coords.map((c, idx) => {
-          const coordKey = `${c.x.toFixed(3)}:${c.y.toFixed(3)}`;
-          const dupIdx = seenCounts.get(coordKey) ?? 0;
-          seenCounts.set(coordKey, dupIdx + 1);
-          let cx = left + ((c.x - minX) / spanX) * width;
-          let cy = bottom - ((c.y - minY) / spanY) * height;
-          if (dupIdx > 0) {
-            const angle = dupIdx * 1.9;
-            const radius = Math.min(10, dupIdx * 3.2);
-            cx += Math.cos(angle) * radius;
-            cy += Math.sin(angle) * radius;
-          }
-          const fill = brandColors[c.brand] || "#6366f1";
-          return (
-            <circle key={idx} cx={cx} cy={cy} r="6" fill={fill} stroke="var(--surface)" strokeWidth="1.2" opacity="0.88">
-              <title>{`${c.brand} — ${c.label}`}</title>
-            </circle>
-          );
-        })}
-      </svg>
-      <figcaption className="legend-row">
-        {Object.entries(brandColors).map(([brand, hex]) => (
-          <span key={brand} className="legend-item">
-            <span className="legend-swatch" style={{ backgroundColor: hex }} aria-hidden="true" />
-            <span>{brand}</span>
-          </span>
-        ))}
-        <span>&middot; Dots close together share similar visuals &amp; ad copy. Hover any dot for its theme.</span>
-      </figcaption>
-    </figure>
+    </div>
   );
 }

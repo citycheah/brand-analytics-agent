@@ -1,7 +1,18 @@
 import type { Metadata } from "next";
-import { PortalNav } from "@/components/PortalNav";
-import { PortalProvider } from "@/components/PortalProvider";
+import { Inter, JetBrains_Mono } from "next/font/google";
+import { LayoutShell } from "@/components/LayoutShell";
+import { PortalProvider } from "@/context/PortalContext";
 import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains-mono",
+});
 
 export const metadata: Metadata = {
   title: {
@@ -12,21 +23,33 @@ export const metadata: Metadata = {
     "Federated Brand & Creative Intelligence Suite uniting SOS/SOV, dynamic creative themes, Vision HITL verification, Bayesian MMM, and breakout velocity monitoring.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+const FOUC_THEME_SCRIPT = `
+try {
+  var saved = localStorage.getItem("color-scheme");
+  var isDark = saved === "dark" || (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.classList.toggle("dark", isDark);
+  document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+} catch (e) {}
+`;
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="en">
+    <html
+      lang="en"
+      className={`${inter.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <meta name="color-scheme" content="light dark" />
+        <script dangerouslySetInnerHTML={{ __html: FOUC_THEME_SCRIPT }} />
       </head>
       <body>
-        <a href="#main-content" className="skip-link visually-hidden">
-          Skip to main content
-        </a>
         <PortalProvider>
-          <PortalNav />
-          <main id="main-content" tabIndex={-1} className="page-shell">
-            {children}
-          </main>
+          <LayoutShell>{children}</LayoutShell>
         </PortalProvider>
       </body>
     </html>

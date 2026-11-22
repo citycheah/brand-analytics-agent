@@ -1,658 +1,981 @@
 "use client";
 
-import Link from "next/link";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
-import { usePortalContext } from "@/components/PortalProvider";
 import {
-  fmtUsd,
-  getPortalMmm,
-  MmmChannelCurve,
-  MmmResponse,
-  MmmSimulationChannelRow,
-  simulateMmmBudget,
-} from "@/lib/api";
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Lock,
+  Play,
+  RotateCcw,
+  Sparkles,
+} from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ReferenceDot,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { usePortal } from "@/context/PortalContext";
+import { evaluateHillResponse, formatCurrency } from "@/lib/analytics";
+import { getPortalMmm, simulateMmm, toUiBrandId } from "@/lib/api";
+import {
+  BRAND_CATALOG,
+  CHANNEL_COLORS,
+  type MmmChannelKey,
+  type MmmPanelType,
+  type MmmResponse,
+} from "@/lib/types";
 
-const CHANNEL_LABELS: Record<string, string> = {
-  own_spend_meta_usd: "Meta Paid Social",
-  own_spend_youtube_usd: "YouTube Video",
-  own_spend_search_usd: "Paid Search",
-  own_spend_tiktok_usd: "TikTok Short-Form",
-  own_spend_display_usd: "Programmatic Display",
-};
+const CHANNEL_KEYS: MmmChannelKey[] = [
+  "own_spend_meta_usd",
+  "own_spend_youtube_usd",
+  "own_spend_tiktok_usd",
+  "own_spend_display_usd",
+];
 
-const CHANNEL_COLORS = ["#2563eb", "#0d9488", "#d97706", "#dc2626", "#7c3aed"];
-
-function formatChannelName(raw: string): string {
-  if (CHANNEL_LABELS[raw]) return CHANNEL_LABELS[raw];
-  const trimmed = raw.replace(/^own_spend_/, "").replace(/_usd$/, "");
-  return trimmed
-    .split("_")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+function buildInitialSpendMap(res: MmmResponse): Record<MmmChannelKey, number> {
+  return {
+    own_spend_meta_usd:
+      res.channels.own_spend_meta_usd?.baseline_spend_usd ?? 0,
+    own_spend_youtube_usd:
+      res.channels.own_spend_youtube_usd?.baseline_spend_usd ?? 0,
+    own_spend_tiktok_usd:
+      res.channels.own_spend_tiktok_usd?.baseline_spend_usd ?? 0,
+    own_spend_display_usd:
+      res.channels.own_spend_display_usd?.baseline_spend_usd ?? 0,
+  };
 }
 
-function hillResponse(spendUsd: number, curve: MmmChannelCurve): number {
-  const x = Math.max(0, spendUsd);
-  if (x <= 0) return 0;
-  const k = Math.max(1e-6, curve.ec50_usd);
-  const s = Math.max(0.1, curve.slope);
-  const xs = Math.pow(x, s);
-  const ks = Math.pow(k, s);
-  return curve.beta * (xs / (xs + ks));
-}
-
-export default function MmmSimulatorPage() {
+export default function MmmPage() {
   return (
-    <Suspense fallback={<p role="status">Loading weekly budget planner...</p>}>
-      <MmmSimulatorContent />
+    <Suspense
+      fallback={
+        <div className="space-y-4">
+          <div className="h-24 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 animate-pulse" />
+          <div className="h-80 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 animate-pulse" />
+        </div>
+      }
+    >
+      <MmmContent />
     </Suspense>
   );
 }
 
-function MmmSimulatorContent() {
-  const { myBrand } = usePortalContext();
+function MmmContent() {
+  const { myBrandId, navigate, theme } = usePortal();
   const searchParams = useSearchParams();
-  const paramBrand = searchParams.get("brand_id") ?? "";
-  const redirectedFromBrand = paramBrand && paramBrand !== myBrand ? paramBrand : null;
 
-  const brandId = myBrand;
-  const country = "Germany";
-  const [panelType, setPanelType] = useState<"conversions" | "google_trends_proxy">("conversions");
-
-  const [data, setData] = useState<MmmResponse | null>(null);
-  const [channelSpends, setChannelSpends] = useState<Record<string, number>>({});
+  const [panelType, setPanelType] = useState<MmmPanelType>("conversions");
+  const [mmmData, setMmmData] = useState<MmmResponse | null>(null);
+  const [sliderSpend, setSliderSpend] = useState<Record<MmmChannelKey, number>>({
+    own_spend_meta_usd: 20_000,
+    own_spend_youtube_usd: 20_000,
+    own_spend_tiktok_usd: 12_000,
+    own_spend_display_usd: 10_000,
+  });
   const [loading, setLoading] = useState(true);
   const [simulating, setSimulating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [ladderOpen, setLadderOpen] = useState(false);
+  const [chartsReady, setChartsReady] = useState(false);
+
   const latestRequestRef = useRef(0);
 
   useEffect(() => {
+    setChartsReady(true);
+  }, []);
+
+  // Detect if user navigated here via a competitor ?brand_id= (case-insensitive canonical check)
+  const requestedBrandParam = searchParams.get("brand_id");
+  const normalizedParamBrand = requestedBrandParam
+    ? toUiBrandId(requestedBrandParam)
+    : null;
+  const competitorLockNotice =
+    normalizedParamBrand &&
+    normalizedParamBrand !== "Unverified / Other" &&
+    normalizedParamBrand !== myBrandId
+      ? BRAND_CATALOG[normalizedParamBrand].name
+      : null;
+
+  useEffect(() => {
     const reqId = ++latestRequestRef.current;
-    let cancelled = false;
     setLoading(true);
     setSimulating(false);
-    setError(null);
-    getPortalMmm(brandId, country, panelType)
+    setErrorMsg(null);
+    getPortalMmm({
+      brand_id: myBrandId,
+      country: "Germany",
+      panel_type: panelType,
+    })
       .then((res) => {
-        if (cancelled || reqId !== latestRequestRef.current) return;
-        setData(res);
-        const initial: Record<string, number> = {};
-        for (const row of res.simulation.channels) {
-          initial[row.channel] = row.simulated_weekly_spend_usd;
-        }
-        setChannelSpends(initial);
+        if (reqId !== latestRequestRef.current) return;
+        setMmmData(res);
+        setSliderSpend(buildInitialSpendMap(res));
         setLoading(false);
       })
-      .catch((err: Error) => {
-        if (!cancelled && reqId === latestRequestRef.current) {
-          setError(err.message);
-          setLoading(false);
-        }
+      .catch((err: unknown) => {
+        if (reqId !== latestRequestRef.current) return;
+        setErrorMsg(
+          err instanceof Error
+            ? err.message
+            : "Failed to load MMM response curves."
+        );
+        setLoading(false);
       });
     return () => {
-      cancelled = true;
       latestRequestRef.current += 1;
     };
-  }, [brandId, country, panelType]);
+  }, [myBrandId, panelType]);
 
-  async function runSimulation(optimize: boolean) {
+  const activeChannelKeys = useMemo(
+    () =>
+      CHANNEL_KEYS.filter((k) => Boolean(mmmData?.channels?.[k])),
+    [mmmData]
+  );
+
+  const totalProposedBudget = useMemo(
+    () =>
+      activeChannelKeys.reduce((acc, k) => acc + (sliderSpend[k] ?? 0), 0),
+    [activeChannelKeys, sliderSpend]
+  );
+
+  const handleRunSimulation = async (optimize: boolean) => {
+    if (!mmmData) return;
     const reqId = ++latestRequestRef.current;
     setSimulating(true);
-    setError(null);
-    const totalBudget = Object.values(channelSpends).reduce((acc, v) => acc + v, 0);
+    setErrorMsg(null);
     try {
-      const res = await simulateMmmBudget({
-        brand_id: brandId,
-        country,
-        total_budget_usd: optimize ? totalBudget : undefined,
-        proposed_spend_by_channel: optimize ? undefined : channelSpends,
+      const targetBudget = optimize
+        ? totalProposedBudget > 0
+          ? totalProposedBudget
+          : mmmData.simulation.baseline_total_spend_usd
+        : totalProposedBudget;
+      const res = await simulateMmm({
+        brand_id: myBrandId,
+        country: "Germany",
+        total_budget_usd: targetBudget,
+        proposed_spend_by_channel: sliderSpend,
         optimize,
         panel_type: panelType,
       });
       if (reqId !== latestRequestRef.current) return;
-      setData(res);
-      const updated: Record<string, number> = {};
+      setMmmData(res);
+      const nextSpend = { ...sliderSpend };
       for (const row of res.simulation.channels) {
-        updated[row.channel] = row.simulated_weekly_spend_usd;
+        nextSpend[row.channel_key] = Math.round(row.proposed_spend_usd);
       }
-      setChannelSpends(updated);
+      setSliderSpend(nextSpend);
     } catch (err) {
       if (reqId !== latestRequestRef.current) return;
-      setError(err instanceof Error ? err.message : "Simulation failed");
+      setErrorMsg(
+        err instanceof Error ? err.message : "MMM simulation failed."
+      );
     } finally {
       if (reqId === latestRequestRef.current) {
         setSimulating(false);
       }
     }
-  }
+  };
 
-  const simChannels = data?.simulation.channels ?? [];
-  const totalShifted =
-    simChannels.reduce((acc, c) => acc + Math.abs(c.spend_delta_usd), 0) / 2;
-  const bestMarginal = [...simChannels].sort(
-    (a, b) => b.marginal_response_per_usd - a.marginal_response_per_usd
-  )[0];
-  const mostSaturated = [...simChannels].sort((a, b) => b.saturation_pct - a.saturation_pct)[0];
-  const scaleUpChannels = simChannels.filter((c) => c.spend_delta_usd > 100);
-  const trimDownChannels = simChannels.filter((c) => c.spend_delta_usd < -100);
-  const topTheme = data
-    ? [...data.theme_attribution].sort(
-        (a, b) => b.incremental_per_1k_usd - a.incremental_per_1k_usd
-      )[0]
-    : undefined;
+  const handleResetBaseline = async () => {
+    if (!mmmData) return;
+    const reqId = ++latestRequestRef.current;
+    const base = buildInitialSpendMap(mmmData);
+    setSliderSpend(base);
+    setSimulating(true);
+    setErrorMsg(null);
+    try {
+      const res = await simulateMmm({
+        brand_id: myBrandId,
+        country: "Germany",
+        total_budget_usd: mmmData.simulation.baseline_total_spend_usd,
+        proposed_spend_by_channel: base,
+        optimize: false,
+        panel_type: panelType,
+      });
+      if (reqId !== latestRequestRef.current) return;
+      setMmmData(res);
+    } catch (err) {
+      if (reqId !== latestRequestRef.current) return;
+      setErrorMsg(
+        err instanceof Error ? err.message : "Failed to reset MMM baseline."
+      );
+    } finally {
+      if (reqId === latestRequestRef.current) {
+        setSimulating(false);
+      }
+    }
+  };
+
+  // Build unified X-axis Hill curve series for Recharts LineChart
+  const hillChartData = useMemo(() => {
+    if (!mmmData || activeChannelKeys.length === 0) return [];
+    const maxSpend = Math.max(
+      ...activeChannelKeys.map((k) => mmmData.channels[k].max_spend_usd)
+    );
+    const steps = 16;
+    const rows: Array<Record<string, number>> = [];
+    for (let i = 0; i <= steps; i += 1) {
+      const spend = Math.round((maxSpend * i) / steps);
+      const point: Record<string, number> = { spend_usd: spend };
+      for (const k of activeChannelKeys) {
+        const ch = mmmData.channels[k];
+        point[k] = Number(
+          evaluateHillResponse(
+            spend,
+            ch.alpha,
+            ch.half_saturation_k,
+            ch.max_contribution
+          ).toFixed(2)
+        );
+      }
+      rows.push(point);
+    }
+    return rows;
+  }, [mmmData, activeChannelKeys]);
+
+  // Executive takeaway calculations
+  const takeaway = useMemo(() => {
+    if (!mmmData || mmmData.simulation.channels.length === 0) return null;
+    const rows = mmmData.simulation.channels;
+    const topMarginal = [...rows].sort(
+      (a, b) => b.marginal_response_per_usd - a.marginal_response_per_usd
+    )[0];
+    const mostSaturated = [...rows].sort(
+      (a, b) => b.saturation_pct - a.saturation_pct
+    )[0];
+    return {
+      topMarginal,
+      mostSaturated,
+      liftPct: mmmData.simulation.expected_outcome_lift_pct,
+    };
+  }, [mmmData]);
+
+  const selectedLadder = useMemo(() => {
+    if (!mmmData || mmmData.ladder_comparison.length === 0) return null;
+    return (
+      mmmData.ladder_comparison.find((r) => r.selected) ??
+      mmmData.ladder_comparison[mmmData.ladder_comparison.length - 1]
+    );
+  }, [mmmData]);
+
+  const gridStroke = theme === "dark" ? "#27272a" : "#e4e4e7";
+  const tickFill = theme === "dark" ? "#a1a1aa" : "#52525b";
+  const myBrandName = BRAND_CATALOG[myBrandId].name;
 
   return (
-    <>
-      <div className="page-header">
+    <div className="space-y-6">
+      {/* Header + Outcome Panel Segmented Toggle */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="page-title">4. {myBrand} Weekly Budget &amp; ROI Planner</h1>
-          <p className="page-subtitle">
-            Test {myBrand}&apos;s 1st-party weekly channel budget shifts using historical diminishing-returns response curves (competitor spend is modeled as external market context), then inspect winning creative themes.
+          <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+            Budget & ROI Planner — {myBrandName} (Germany 1st-Party)
+          </h2>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+            Bayesian Hill diminishing-returns simulator strictly calibrated to
+            1st-party {myBrandName} Germany weekly media panels.
           </p>
         </div>
 
-        <form className="form-row" onSubmit={(e) => e.preventDefault()} style={{ alignItems: "center" }}>
-          <div className="badge badge-ok" style={{ padding: "0.45rem 0.75rem", fontSize: "0.88rem" }}>
-            1st-Party Brand: {myBrand} ({country})
-          </div>
-
-          <fieldset style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "0.4rem 0.75rem" }}>
-            <legend style={{ fontSize: "0.82rem", fontWeight: 600 }}>Goal Metric</legend>
-            <div className="form-row" style={{ gap: "0.9rem" }}>
-              <label className="inline-check" htmlFor="panel-conv">
-                <input
-                  id="panel-conv"
-                  type="radio"
-                  name="panel_type"
-                  checked={panelType === "conversions"}
-                  onChange={() => setPanelType("conversions")}
-                />
-                <span>Verified Conversions (Leads &amp; Sales)</span>
-              </label>
-              <label className="inline-check" htmlFor="panel-proxy">
-                <input
-                  id="panel-proxy"
-                  type="radio"
-                  name="panel_type"
-                  checked={panelType === "google_trends_proxy"}
-                  onChange={() => setPanelType("google_trends_proxy")}
-                />
-                <span>Search Interest Proxy (Demand Signal)</span>
-              </label>
-            </div>
-          </fieldset>
-        </form>
+        {/* Conversions vs Google Trends Proxy Toggle */}
+        <div
+          role="group"
+          aria-label="Outcome Panel Type"
+          className="inline-flex items-center rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-1"
+        >
+          <button
+            type="button"
+            onClick={() => setPanelType("conversions")}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+              panelType === "conversions"
+                ? "bg-white text-zinc-900 shadow-xs dark:bg-zinc-100 dark:text-zinc-950"
+                : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+            }`}
+          >
+            Conversions Outcome
+          </button>
+          <button
+            type="button"
+            onClick={() => setPanelType("google_trends_proxy")}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+              panelType === "google_trends_proxy"
+                ? "bg-white text-zinc-900 shadow-xs dark:bg-zinc-100 dark:text-zinc-950"
+                : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+            }`}
+          >
+            Google Trends Proxy
+          </button>
+        </div>
       </div>
 
-      {redirectedFromBrand && (
-        <div role="status" className="banner banner-warn">
-          <span aria-hidden="true">&#9888;</span>
-          <span>
-            <strong>1st-Party MMM Governance: </strong>
-            Step 4 optimizes only 1st-party spend for <strong>{myBrand}</strong> (competitor{" "}
-            <strong>{redirectedFromBrand}</strong> spend is modeled as an external SOV control). Switch{" "}
-            <strong>My Brand (1st-Party)</strong> in the top bar to change workspaces.
-          </span>
+      {/* Strict 1st-Party Governance Lock Banner when navigated with competitor ?brand_id= */}
+      {competitorLockNotice && (
+        <div
+          role="status"
+          data-testid="competitor-governance-banner"
+          className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-100/80 dark:bg-zinc-900 px-4 py-3.5 flex flex-wrap items-center justify-between gap-3"
+        >
+          <div className="flex items-start gap-2.5 text-xs text-zinc-700 dark:text-zinc-300">
+            <Lock className="h-4 w-4 mt-0.5 shrink-0 text-zinc-600 dark:text-zinc-400" />
+            <div>
+              <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                1st-Party Governance Lock Active:
+              </span>{" "}
+              Competitor brand{" "}
+              <span className="font-medium">{competitorLockNotice}</span> was
+              requested via URL parameter, but Bayesian MMM budget allocation is
+              strictly locked to your 1st-party brand (
+              <span className="font-semibold">{myBrandName}</span>) because
+              1st-party conversion panels are never calibrated on competitor
+              spend.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/mmm")}
+            className="text-xs font-medium text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100 underline whitespace-nowrap"
+          >
+            Dismiss notice
+          </button>
         </div>
       )}
 
-      {error && (
-        <div role="alert" className="banner banner-danger">
-          <span aria-hidden="true">!</span>
-          <span>{error}</span>
+      {errorMsg && (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/50 dark:text-rose-300"
+        >
+          {errorMsg}
         </div>
       )}
 
-      {loading && <p role="status">Loading channel response curves for {brandId}...</p>}
-
-      {data && (
-        <>
-          {(data.roas_claim_blocked || data.is_proxy_outcome || data.is_spend_modeled) && (
-            <div role="alert" className="banner banner-warn">
-              <span aria-hidden="true">&#9888;</span>
-              <div>
-                <strong>
-                  {data.roas_claim_blocked ? "ROAS CLAIM BLOCKED — " : "PLANNING NOTE — "}
-                </strong>
-                <span>{data.disclaimer}</span>
-              </div>
+      {/* ROAS Claim Blocked Governance Banner (Google Trends Proxy Mode) */}
+      {mmmData?.roas_claim_blocked && (
+        <div
+          role="alert"
+          data-testid="roas-blocked-banner"
+          className="rounded-xl border border-amber-300 dark:border-amber-800/80 bg-amber-50 dark:bg-amber-950/50 px-4 py-3.5 flex items-start gap-3"
+        >
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-700 dark:text-amber-400" />
+          <div className="space-y-0.5">
+            <div className="text-xs font-semibold text-amber-900 dark:text-amber-200">
+              ROAS Claim Blocked — Proxy Index Only
             </div>
-          )}
+            <p className="text-xs text-amber-800 dark:text-amber-300/90 leading-relaxed">
+              {mmmData.disclaimer} All dollar ROI figures are replaced with{" "}
+              <span className="font-mono font-medium">proxy_index_only</span>.
+            </p>
+          </div>
+        </div>
+      )}
 
-          <section className="kpi-grid" aria-label="Budget Simulation Summary">
-            <article className="kpi-card">
-              <p className="kpi-label">Current Weekly Budget</p>
-              <p className="kpi-value">{fmtUsd(data.simulation.baseline_total_spend_usd)}</p>
-            </article>
-            <article className="kpi-card">
-              <p className="kpi-label">Proposed Weekly Budget</p>
-              <p className="kpi-value">{fmtUsd(data.simulation.simulated_total_spend_usd)}</p>
-            </article>
-            <article className="kpi-card">
-              <p className="kpi-label">
-                {data.roas_claim_blocked ? "Expected Search Interest Lift" : "Expected Conversion Lift"}
-              </p>
-              <p className="kpi-value">
-                {data.simulation.expected_outcome_lift_pct >= 0 ? "+" : ""}
-                {data.simulation.expected_outcome_lift_pct.toFixed(2)}%
-              </p>
-              <p className="kpi-note">
-                Baseline {data.simulation.baseline_total_contribution.toFixed(1)} &rarr;{" "}
-                {data.simulation.simulated_total_contribution.toFixed(1)}
-              </p>
-            </article>
-            <article className="kpi-card">
-              <p className="kpi-label">Active Model Scope</p>
-              <p className="kpi-value">{data.artifact_scope?.brand_id} ({data.artifact_scope?.country_iso})</p>
-              <p className="kpi-note">
-                {data.roas_claim_blocked ? "Demand proxy index only" : "Incremental conversion ROI"}
-                {data.artifact_scope?.used_fallback_scope ? " [fallback scope]" : ""}
-              </p>
-            </article>
-          </section>
+      {loading && !mmmData && (
+        <div className="space-y-4">
+          <div className="h-24 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 animate-pulse" />
+          <div className="h-72 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 animate-pulse" />
+        </div>
+      )}
 
-          {bestMarginal && mostSaturated && (
-            <div role="region" aria-label="Executive Budget Takeaway" className="banner banner-ok">
-              <span aria-hidden="true">&#10003;</span>
-              <div>
-                {totalShifted < 1 ? (
-                  <>
-                    <strong>Baseline Diagnosis: </strong>
-                    <span>
-                      <strong>{formatChannelName(bestMarginal.channel)}</strong> currently offers the
-                      highest marginal return ({bestMarginal.saturation_pct.toFixed(0)}% saturated),
-                      whereas <strong>{formatChannelName(mostSaturated.channel)}</strong> is at{" "}
-                      {mostSaturated.saturation_pct.toFixed(0)}% saturation. Click{" "}
-                      <strong>Recommend Optimal Split</strong> below to calculate the optimal weekly
-                      reallocation
-                      {topTheme && !data.roas_claim_blocked
-                        ? `, and prioritize "${topTheme.theme_label}" creatives.`
-                        : "."}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <strong>Recommended Reallocation Summary: </strong>
-                    <span>
-                      Shifting <strong>{fmtUsd(totalShifted)}/wk</strong> from{" "}
-                      <strong>
-                        {trimDownChannels.map((c) => formatChannelName(c.channel)).join(", ") ||
-                          "saturated channels"}
-                      </strong>{" "}
-                      into{" "}
-                      <strong>
-                        {scaleUpChannels.map((c) => formatChannelName(c.channel)).join(", ") ||
-                          "high-headroom channels"}
-                      </strong>{" "}
-                      projects{" "}
-                      <strong>
-                        {data.simulation.expected_outcome_lift_pct >= 0 ? "+" : ""}
-                        {data.simulation.expected_outcome_lift_pct.toFixed(2)}%
-                      </strong>{" "}
-                      lift in{" "}
-                      {data.roas_claim_blocked
-                        ? "Search Interest Proxy"
-                        : "Verified Conversions"}
-                      {topTheme
-                        ? ` \u2014 pair incremental spend with top theme "${topTheme.theme_label}".`
-                        : "."}
-                    </span>
-                  </>
-                )}
-              </div>
+      {/* Executive Takeaway Banner */}
+      {mmmData && takeaway && (
+        <section
+          aria-label="Executive Takeaway"
+          className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-4 grid grid-cols-1 md:grid-cols-3 gap-4"
+        >
+          <div>
+            <div className="text-xs text-zinc-500 dark:text-zinc-400">
+              Top Marginal Channel
             </div>
-          )}
+            <div className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              {takeaway.topMarginal.channel_label}
+            </div>
+            <div className="mt-0.5 text-xs font-mono tabular-nums text-emerald-700 dark:text-emerald-400">
+              {takeaway.topMarginal.marginal_response_per_usd.toFixed(2)} units
+              / $1k marginal
+            </div>
+          </div>
 
-          <div className="card-grid">
-            <section className="panel" aria-labelledby="sim-controls-heading">
-              <h2 id="sim-controls-heading" className="panel-title">
-                Adjust Weekly Channel Budgets
-              </h2>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void runSimulation(false);
-                }}
+          <div className="md:border-l md:border-zinc-200 dark:md:border-zinc-800 md:pl-4">
+            <div className="text-xs text-zinc-500 dark:text-zinc-400">
+              Most Saturated Channel
+            </div>
+            <div className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              {takeaway.mostSaturated.channel_label}
+            </div>
+            <div className="mt-0.5 text-xs font-mono tabular-nums text-rose-700 dark:text-rose-400">
+              {takeaway.mostSaturated.saturation_pct.toFixed(1)}% Hill
+              saturation
+            </div>
+          </div>
+
+          <div className="md:border-l md:border-zinc-200 dark:md:border-zinc-800 md:pl-4">
+            <div className="text-xs text-zinc-500 dark:text-zinc-400">
+              Expected Outcome Lift (
+              {mmmData.roas_claim_blocked ? "Proxy Index" : "Conversions"})
+            </div>
+            <div
+              data-testid="mmm-expected-lift"
+              className={`mt-1 text-xl font-semibold font-mono tabular-nums ${
+                takeaway.liftPct > 0
+                  ? "text-emerald-700 dark:text-emerald-400"
+                  : takeaway.liftPct < 0
+                    ? "text-rose-700 dark:text-rose-400"
+                    : "text-zinc-900 dark:text-zinc-100"
+              }`}
+            >
+              {takeaway.liftPct > 0 ? "+" : ""}
+              {takeaway.liftPct.toFixed(2)}%
+            </div>
+            <div className="mt-0.5 text-xs font-mono tabular-nums text-zinc-500 dark:text-zinc-400">
+              {mmmData.simulation.baseline_total_contribution.toLocaleString()}{" "}
+              →{" "}
+              {mmmData.simulation.simulated_total_contribution.toLocaleString()}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Sliders + Hill Diminishing-Returns Saturation Curves */}
+      {mmmData && (
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+          {/* Interactive Channel Budget Sliders */}
+          <section className="xl:col-span-5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-5 space-y-5">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  Weekly Channel Budget Allocation
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 font-mono tabular-nums">
+                  Proposed: {formatCurrency(totalProposedBudget, false)}/wk ·
+                  Baseline:{" "}
+                  {formatCurrency(
+                    mmmData.simulation.baseline_total_spend_usd,
+                    false
+                  )}
+                  /wk
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={simulating}
+                onClick={handleResetBaseline}
+                aria-label="Reset sliders to baseline"
+                className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 dark:border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
               >
-                {data.simulation.channels.map((ch) => {
-                  const currentVal = channelSpends[ch.channel] ?? ch.baseline_weekly_spend_usd;
-                  const maxBound = Math.max(50000, Math.round(ch.baseline_weekly_spend_usd * 2.5));
-                  const curve = data.channels[ch.channel];
-                  return (
-                    <div key={ch.channel} className="field" style={{ marginBlockEnd: "0.9rem" }}>
-                      <label htmlFor={`slider-${ch.channel}`}>
-                        {formatChannelName(ch.channel)}: <strong>{fmtUsd(currentVal)}</strong> / wk{" "}
-                        {curve && !data.roas_claim_blocked && (
-                          <span className="kpi-note">
-                            (Expected return {curve.roas_mean.toFixed(2)}x | 90% range [{curve.roas_hdi_90[0].toFixed(2)}, {curve.roas_hdi_90[1].toFixed(2)}])
+                <RotateCcw className="h-3 w-3" />
+                <span>Reset</span>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {activeChannelKeys.map((key) => {
+                const curve = mmmData.channels[key];
+                const simRow = mmmData.simulation.channels.find(
+                  (c) => c.channel_key === key
+                );
+                const val = sliderSpend[key] ?? curve.baseline_spend_usd;
+                const delta = val - curve.baseline_spend_usd;
+                return (
+                  <div key={key} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <label
+                        htmlFor={`slider-${key}`}
+                        className="flex items-center gap-2 font-medium text-zinc-800 dark:text-zinc-200"
+                      >
+                        <span
+                          className="h-2.5 w-2.5 rounded-xs shrink-0"
+                          style={{ backgroundColor: CHANNEL_COLORS[key] }}
+                          aria-hidden="true"
+                        />
+                        <span>{curve.channel_label}</span>
+                      </label>
+                      <div className="flex items-center gap-2 font-mono tabular-nums">
+                        <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                          {formatCurrency(val, false)}
+                        </span>
+                        {Math.abs(delta) >= 50 && (
+                          <span
+                            className={`text-[11px] ${
+                              delta > 0
+                                ? "text-emerald-700 dark:text-emerald-400"
+                                : "text-rose-700 dark:text-rose-400"
+                            }`}
+                          >
+                            {delta > 0 ? "+" : ""}
+                            {formatCurrency(delta, true)}
                           </span>
                         )}
-                      </label>
-                      <input
-                        id={`slider-${ch.channel}`}
-                        type="range"
-                        min={1000}
-                        max={maxBound}
-                        step={500}
-                        value={Math.round(currentVal)}
-                        onChange={(e) =>
-                          setChannelSpends((prev) => ({
-                            ...prev,
-                            [ch.channel]: Number(e.target.value),
-                          }))
-                        }
-                      />
+                      </div>
                     </div>
+
+                    <input
+                      id={`slider-${key}`}
+                      type="range"
+                      min={curve.min_spend_usd}
+                      max={curve.max_spend_usd}
+                      step={500}
+                      value={Math.round(val)}
+                      onChange={(e) =>
+                        setSliderSpend((prev) => ({
+                          ...prev,
+                          [key]: Number(e.target.value),
+                        }))
+                      }
+                      className="cis-slider w-full"
+                    />
+
+                    <div className="flex items-center justify-between text-[11px] font-mono tabular-nums text-zinc-500 dark:text-zinc-400">
+                      <span>
+                        Base {formatCurrency(curve.baseline_spend_usd, false)}
+                        /wk
+                      </span>
+                      <span>
+                        Sat. {simRow ? `${simRow.saturation_pct.toFixed(1)}%` : "—"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                disabled={simulating}
+                onClick={() => handleRunSimulation(false)}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3.5 py-2 text-xs font-medium text-zinc-900 hover:bg-zinc-50 disabled:opacity-50 dark:text-zinc-100 dark:hover:bg-zinc-800 transition-colors whitespace-nowrap"
+              >
+                <Play className="h-3.5 w-3.5" />
+                <span>{simulating ? "Simulating..." : "Run What-If"}</span>
+              </button>
+              <button
+                type="button"
+                disabled={simulating}
+                onClick={() => handleRunSimulation(true)}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-zinc-900 px-3.5 py-2 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-200 transition-colors whitespace-nowrap"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>
+                  {simulating ? "Optimizing..." : "Auto-Optimize Split"}
+                </span>
+              </button>
+            </div>
+          </section>
+
+          {/* Hill Diminishing-Returns Saturation Curves (Recharts LineChart) */}
+          <section className="xl:col-span-7 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-5 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  Hill Diminishing-Returns Saturation Curves
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Hollow circles mark baseline weekly spend; filled circles mark
+                  proposed simulated spend on each channel curve.
+                </p>
+              </div>
+              <span className="text-[11px] font-mono tabular-nums text-zinc-500 dark:text-zinc-400">
+                {mmmData.roi_label}
+              </span>
+            </div>
+
+            <div className="h-[340px] w-full">
+              {chartsReady ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={hillChartData}
+                    margin={{ top: 12, right: 20, left: 0, bottom: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                    <XAxis
+                      dataKey="spend_usd"
+                      type="number"
+                      domain={[0, "dataMax"]}
+                      tickFormatter={(v) => formatCurrency(Number(v), true)}
+                      tick={{ fill: tickFill, fontSize: 11 }}
+                      axisLine={{ stroke: gridStroke }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fill: tickFill, fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor:
+                          theme === "dark" ? "#18181b" : "#ffffff",
+                        borderColor:
+                          theme === "dark" ? "#3f3f46" : "#e4e4e7",
+                        borderRadius: "8px",
+                        fontSize: "12px",
+                      }}
+                      labelFormatter={(label) =>
+                        `Weekly Spend: ${formatCurrency(Number(label), false)}`
+                      }
+                    />
+                    <Legend wrapperStyle={{ fontSize: "12px" }} />
+
+                    {activeChannelKeys.map((key) => (
+                      <Line
+                        key={key}
+                        type="monotone"
+                        dataKey={key}
+                        name={mmmData.channels[key].channel_label}
+                        stroke={CHANNEL_COLORS[key]}
+                        strokeWidth={2}
+                        dot={false}
+                        isAnimationActive={false}
+                      />
+                    ))}
+
+                    {/* Baseline & Proposed Spend Reference Markers */}
+                    {mmmData.simulation.channels.map((row) => (
+                      <React.Fragment key={row.channel_key}>
+                        <ReferenceDot
+                          x={row.baseline_spend_usd}
+                          y={row.baseline_contribution}
+                          r={5}
+                          fill={theme === "dark" ? "#18181b" : "#ffffff"}
+                          stroke={CHANNEL_COLORS[row.channel_key]}
+                          strokeWidth={2}
+                        />
+                        <ReferenceDot
+                          x={row.proposed_spend_usd}
+                          y={row.proposed_contribution}
+                          r={6}
+                          fill={CHANNEL_COLORS[row.channel_key]}
+                          stroke={theme === "dark" ? "#18181b" : "#ffffff"}
+                          strokeWidth={2}
+                        />
+                      </React.Fragment>
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full w-full rounded-lg bg-zinc-100 dark:bg-zinc-900 animate-pulse" />
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* Full-Width Channel Reallocation Delta Table */}
+      {mmmData && (
+        <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 overflow-hidden">
+          <div className="px-5 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                Channel Reallocation Delta Table
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                Baseline vs. simulated weekly spend, Hill curve saturation,
+                marginal return, and posterior intervals.
+              </p>
+            </div>
+            <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400">
+              {mmmData.roas_claim_blocked
+                ? "proxy_index_only"
+                : "Conversions 90% HDI"}
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40 text-zinc-500 dark:text-zinc-400">
+                  <th className="py-2.5 px-5 font-medium">Channel</th>
+                  <th className="py-2.5 px-4 font-medium text-right">
+                    Baseline / wk
+                  </th>
+                  <th className="py-2.5 px-4 font-medium text-right">
+                    Proposed / wk
+                  </th>
+                  <th className="py-2.5 px-4 font-medium text-right">Delta</th>
+                  <th className="py-2.5 px-4 font-medium text-right">
+                    Saturation %
+                  </th>
+                  <th className="py-2.5 px-4 font-medium text-right">
+                    Marginal Response / $1k
+                  </th>
+                  <th className="py-2.5 px-5 font-medium text-right">
+                    {mmmData.roas_claim_blocked
+                      ? "proxy_index_only"
+                      : "ROAS 90% HDI"}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+                {mmmData.simulation.channels.map((row) => {
+                  const satColor =
+                    row.saturation_pct >= 72
+                      ? "text-rose-700 dark:text-rose-400"
+                      : row.saturation_pct >= 55
+                        ? "text-amber-700 dark:text-amber-400"
+                        : "text-emerald-700 dark:text-emerald-400";
+
+                  return (
+                    <tr
+                      key={row.channel_key}
+                      className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
+                    >
+                      <td className="py-3 px-5 font-medium text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 rounded-xs shrink-0"
+                            style={{
+                              backgroundColor: CHANNEL_COLORS[row.channel_key],
+                            }}
+                            aria-hidden="true"
+                          />
+                          <span>{row.channel_label}</span>
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono tabular-nums text-zinc-600 dark:text-zinc-400">
+                        {formatCurrency(row.baseline_spend_usd, false)}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono tabular-nums font-medium text-zinc-900 dark:text-zinc-100">
+                        {formatCurrency(row.proposed_spend_usd, false)}
+                      </td>
+                      <td
+                        className={`py-3 px-4 text-right font-mono tabular-nums ${
+                          row.delta_spend_usd > 0
+                            ? "text-emerald-700 dark:text-emerald-400"
+                            : row.delta_spend_usd < 0
+                              ? "text-rose-700 dark:text-rose-400"
+                              : "text-zinc-500 dark:text-zinc-400"
+                        }`}
+                      >
+                        {row.delta_spend_usd > 0 ? "+" : ""}
+                        {formatCurrency(row.delta_spend_usd, true)}
+                      </td>
+                      <td
+                        className={`py-3 px-4 text-right font-mono tabular-nums font-medium ${satColor}`}
+                      >
+                        {row.saturation_pct.toFixed(1)}%
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">
+                        {row.marginal_response_per_usd.toFixed(2)}
+                      </td>
+                      <td className="py-3 px-5 text-right font-mono tabular-nums whitespace-nowrap text-zinc-800 dark:text-zinc-200">
+                        {mmmData.roas_claim_blocked ? (
+                          <span className="text-amber-700 dark:text-amber-400">
+                            proxy_index_only
+                          </span>
+                        ) : (
+                          `${row.roas_mean.toFixed(2)}x (${row.roas_hdi_low.toFixed(1)}–${row.roas_hdi_high.toFixed(1)}x)`
+                        )}
+                      </td>
+                    </tr>
                   );
                 })}
-                <div className="form-row">
-                  <button type="submit" className="btn" disabled={simulating}>
-                    {simulating ? "Simulating..." : "Forecast Custom Split"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={simulating}
-                    onClick={() => void runSimulation(true)}
-                  >
-                    {simulating ? "Optimizing..." : "Recommend Optimal Split"}
-                  </button>
-                </div>
-              </form>
-            </section>
-
-            <section className="panel" aria-labelledby="theme-attr-heading">
-              <div className="page-header" style={{ marginBlockEnd: "0.75rem" }}>
-                <div>
-                  <h2 id="theme-attr-heading" className="panel-title" style={{ margin: 0 }}>
-                    Creative Theme ROI Attribution
-                  </h2>
-                  <p className="kpi-note" style={{ marginBlockStart: "0.2rem" }}>
-                    Estimated contribution by narrative theme (modeled separately from channel mix).
-                  </p>
-                </div>
-                <Link href="/themes" className="btn">
-                  Back to Step 2: Themes &rarr;
-                </Link>
-              </div>
-              <div tabIndex={0} role="region" aria-labelledby="theme-attr-heading" className="table-wrapper responsive-stack">
-                <table>
-                  <caption>Incremental efficiency by creative messaging theme</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Theme Label</th>
-                      <th scope="col">Ad Spend</th>
-                      <th scope="col">Spend Share</th>
-                      <th scope="col">Lift per $1k</th>
-                      <th scope="col">Contribution Share</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.theme_attribution.map((t) => (
-                      <tr key={t.theme_label}>
-                        <th scope="row">{t.theme_label}</th>
-                        <td data-label="Ad Spend">{fmtUsd(t.total_spend_usd)}</td>
-                        <td data-label="Spend Share">{t.spend_share_pct.toFixed(1)}%</td>
-                        <td data-label="Lift per $1k">
-                          {data.roas_claim_blocked ? "Blocked in Proxy Mode" : t.incremental_per_1k_usd.toFixed(3)}
-                        </td>
-                        <td data-label="Contribution Share">{t.contribution_share_pct.toFixed(1)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+              </tbody>
+            </table>
           </div>
+        </section>
+      )}
 
-          <div className="card-grid">
-            <section className="panel" aria-labelledby="realloc-table-heading">
-              <h2 id="realloc-table-heading" className="panel-title">
-                Recommended Channel Reallocation
-              </h2>
-              <p className="kpi-note" style={{ marginBlockEnd: "0.75rem" }}>
-                Side-by-side comparison of current baseline vs. proposed weekly spend and saturation headroom.
+      {/* Creative Theme Attribution Bar Chart */}
+      {mmmData && (
+        <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                Creative Theme Attribution
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                Share of attributed outcome vs. spend share by creative theme (
+                {myBrandName} Germany).
               </p>
-              <div tabIndex={0} role="region" aria-labelledby="realloc-table-heading" className="table-wrapper responsive-stack">
-                <table>
-                  <caption>Weekly spend reallocation and saturation status per channel</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Channel</th>
-                      <th scope="col">Baseline / wk</th>
-                      <th scope="col">Proposed / wk</th>
-                      <th scope="col">Shift (&Delta;)</th>
-                      <th scope="col">Saturation</th>
-                      <th scope="col">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {simChannels.map((ch) => {
-                      const deltaPrefix =
-                        ch.spend_delta_usd > 0 ? "+" : ch.spend_delta_usd < 0 ? "-" : "";
-                      const actionBadge =
-                        ch.spend_delta_usd >= 250
-                          ? { cls: "badge-ok", label: "Scale Up" }
-                          : ch.spend_delta_usd <= -250
-                          ? { cls: "badge-warn", label: "Trim Saturated" }
-                          : { cls: "", label: `Hold Steady (${ch.saturation_pct.toFixed(0)}% sat)` };
-                      return (
-                        <tr key={ch.channel}>
-                          <th scope="row">{formatChannelName(ch.channel)}</th>
-                          <td data-label="Baseline / wk">{fmtUsd(ch.baseline_weekly_spend_usd)}</td>
-                          <td data-label="Proposed / wk">{fmtUsd(ch.simulated_weekly_spend_usd)}</td>
-                          <td data-label="Shift (Δ)">
-                            {deltaPrefix}
-                            {fmtUsd(Math.abs(ch.spend_delta_usd))}
-                          </td>
-                          <td data-label="Saturation">{ch.saturation_pct.toFixed(0)}%</td>
-                          <td data-label="Action">
-                            <span className={`badge ${actionBadge.cls}`}>{actionBadge.label}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="panel" aria-labelledby="hill-curves-heading">
-              <h2 id="hill-curves-heading" className="panel-title">
-                Diminishing Returns (Hill Response Curves)
-              </h2>
-              <ResponseCurvesSvg
-                curves={data.channels}
-                simChannels={simChannels}
-                roasBlocked={data.roas_claim_blocked}
-              />
-            </section>
+            </div>
+            <div className="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  className="h-2.5 w-2.5 rounded-xs bg-zinc-400 dark:bg-zinc-500"
+                  aria-hidden="true"
+                />
+                <span>Spend Share</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  className="h-2.5 w-2.5 rounded-xs bg-blue-600"
+                  aria-hidden="true"
+                />
+                <span>Attributed Share</span>
+              </span>
+            </div>
           </div>
 
-          <details className="panel diag-drawer">
-            <summary>
-              Statistical Model Fit &amp; Convergence Diagnostics (3-Tier Calibration Ladder)
-            </summary>
-            <p className="kpi-note" style={{ marginBlockEnd: "0.75rem" }}>
-              Out-of-sample holdout validation comparing Tier 1 (Proportional Baseline), Tier 2 (Ridge Diminishing Returns), and Champion Tier 3 (Bayesian PyMC + nutpie Adstock/Hill). R-hat &lt; 1.05 and 0 divergences indicate clean convergence.
-            </p>
-            <div tabIndex={0} role="region" aria-label="MMM Model Calibration Ladder" className="table-wrapper">
-              <table>
-                <caption>Model validation metrics across calibration tiers</caption>
+          <div className="h-[240px] w-full">
+            {chartsReady ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={mmmData.theme_attribution}
+                  layout="vertical"
+                  margin={{ top: 4, right: 24, left: 16, bottom: 0 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke={gridStroke}
+                    horizontal={false}
+                  />
+                  <XAxis
+                    type="number"
+                    unit="%"
+                    tick={{ fill: tickFill, fontSize: 11 }}
+                    axisLine={{ stroke: gridStroke }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="theme_label"
+                    width={210}
+                    tick={{ fill: tickFill, fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor:
+                        theme === "dark" ? "#18181b" : "#ffffff",
+                      borderColor: theme === "dark" ? "#3f3f46" : "#e4e4e7",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                    }}
+                    formatter={(val: unknown, name: unknown) => [
+                      `${Number(val).toFixed(1)}%`,
+                      String(name),
+                    ]}
+                  />
+                  <Bar
+                    dataKey="spend_share_pct"
+                    name="Spend Share"
+                    fill={theme === "dark" ? "#71717a" : "#a1a1aa"}
+                    radius={[0, 3, 3, 0]}
+                    barSize={10}
+                  />
+                  <Bar
+                    dataKey="contribution_share_pct"
+                    name="Attributed Share"
+                    fill="#2563eb"
+                    radius={[0, 3, 3, 0]}
+                    barSize={10}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full w-full rounded-lg bg-zinc-100 dark:bg-zinc-900 animate-pulse" />
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Collapsible Model Ladder & Convergence Diagnostics Drawer */}
+      {mmmData && (
+        <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 overflow-hidden">
+          <button
+            type="button"
+            aria-expanded={ladderOpen}
+            onClick={() => setLadderOpen((o) => !o)}
+            className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-zinc-50 dark:hover:bg-zinc-900/80 transition-colors"
+          >
+            <div>
+              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                Model Ladder & Convergence Diagnostics
+              </span>
+              {selectedLadder && (
+                <span className="ml-3 text-xs font-mono tabular-nums text-zinc-500 dark:text-zinc-400">
+                  Selected: {selectedLadder.tier}
+                  {selectedLadder.max_rhat != null
+                    ? ` · max_rhat ${selectedLadder.max_rhat.toFixed(3)}`
+                    : ""}
+                  {selectedLadder.divergences != null
+                    ? ` · ${selectedLadder.divergences} divergences`
+                    : ""}
+                </span>
+              )}
+            </div>
+            {ladderOpen ? (
+              <ChevronUp className="h-4 w-4 text-zinc-500" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-zinc-500" />
+            )}
+          </button>
+
+          {ladderOpen && (
+            <div className="px-5 py-4 border-t border-zinc-200 dark:border-zinc-800 overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr>
-                    <th scope="col">Model Tier</th>
-                    <th scope="col">RMSE</th>
-                    <th scope="col">MAPE %</th>
-                    <th scope="col">R&sup2;</th>
-                    <th scope="col">MCMC R-hat / Divergences</th>
+                  <tr className="border-b border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400">
+                    <th className="py-2 pr-4 font-medium">Model Tier</th>
+                    <th className="py-2 px-3 font-medium text-right">RMSE</th>
+                    <th className="py-2 px-3 font-medium text-right">MAPE</th>
+                    <th className="py-2 px-3 font-medium text-right">R²</th>
+                    <th className="py-2 px-3 font-medium text-right">
+                      max_rhat
+                    </th>
+                    <th className="py-2 px-3 font-medium text-right">
+                      min_ess
+                    </th>
+                    <th className="py-2 pl-3 font-medium text-right">
+                      divergences
+                    </th>
                   </tr>
                 </thead>
-                <tbody>
-                  {data.ladder_comparison.map((row) => (
-                    <tr key={row.tier}>
-                      <th scope="row">{row.tier}</th>
-                      <td>{row.rmse.toFixed(2)}</td>
-                      <td>{row.mape_pct.toFixed(2)}%</td>
-                      <td>{row.r2.toFixed(4)}</td>
-                      <td>
-                        {row.max_rhat !== undefined && row.max_rhat !== null
-                          ? `${row.max_rhat.toFixed(4)} / ${row.divergences ?? 0} div`
-                          : "Deterministic"}
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+                  {mmmData.ladder_comparison.map((row) => (
+                    <tr
+                      key={row.tier}
+                      className={
+                        row.selected ? "bg-zinc-50 dark:bg-zinc-800/40" : ""
+                      }
+                    >
+                      <td className="py-2.5 pr-4">
+                        <div className="font-medium text-zinc-900 dark:text-zinc-100">
+                          {row.label}
+                        </div>
+                        <div className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+                          {row.tier}
+                          {row.selected ? " · Active Production Model" : ""}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">
+                        {row.rmse.toFixed(2)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">
+                        {row.mape.toFixed(1)}%
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums font-medium text-zinc-900 dark:text-zinc-100">
+                        {row.r2.toFixed(3)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">
+                        {row.max_rhat !== null ? row.max_rhat.toFixed(3) : "—"}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums text-zinc-700 dark:text-zinc-300">
+                        {row.min_ess !== null
+                          ? row.min_ess.toLocaleString()
+                          : "—"}
+                      </td>
+                      <td className="py-2.5 pl-3 text-right font-mono tabular-nums text-emerald-700 dark:text-emerald-400">
+                        {row.divergences !== null ? row.divergences : "—"}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </details>
-        </>
+          )}
+        </section>
       )}
-    </>
-  );
-}
-
-function ResponseCurvesSvg({
-  curves,
-  simChannels,
-  roasBlocked,
-}: {
-  curves: Record<string, MmmChannelCurve>;
-  simChannels: MmmSimulationChannelRow[];
-  roasBlocked: boolean;
-}) {
-  if (!simChannels.length) {
-    return <p className="page-subtitle">No channel response curves loaded for this brand.</p>;
-  }
-
-  const maxSpend = Math.max(
-    80000,
-    ...simChannels.map(
-      (c) => Math.max(c.baseline_weekly_spend_usd, c.simulated_weekly_spend_usd) * 1.15
-    )
-  );
-  const steps = 24;
-  const series = simChannels
-    .map((row, idx) => {
-      const curve = curves[row.channel];
-      if (!curve) return null;
-      const pts: Array<{ spend: number; contrib: number }> = [];
-      for (let i = 0; i <= steps; i++) {
-        const spend = (i / steps) * maxSpend;
-        pts.push({ spend, contrib: hillResponse(spend, curve) });
-      }
-      return {
-        row,
-        curve,
-        color: CHANNEL_COLORS[idx % CHANNEL_COLORS.length],
-        pts,
-      };
-    })
-    .filter((item): item is NonNullable<typeof item> => item !== null);
-
-  if (!series.length) {
-    return <p className="page-subtitle">Channel Hill curve parameters unavailable.</p>;
-  }
-
-  const maxContrib =
-    Math.max(
-      1e-3,
-      ...series.flatMap((s) => s.pts.map((p) => p.contrib)),
-      ...series.map((s) => Math.max(s.row.baseline_contribution, s.row.simulated_contribution))
-    ) * 1.08;
-
-  const left = 62;
-  const right = 576;
-  const top = 18;
-  const bottom = 266;
-  const width = right - left;
-  const height = bottom - top;
-  const ticks = [0, 0.25, 0.5, 0.75, 1];
-  const mapX = (s: number) => left + (s / maxSpend) * width;
-  const mapY = (y: number) => bottom - (y / maxContrib) * height;
-
-  return (
-    <figure style={{ margin: 0 }}>
-      <svg
-        role="img"
-        aria-label="Channel Hill saturation response curves comparing baseline vs proposed weekly spend"
-        viewBox="0 0 600 320"
-        style={{
-          inlineSize: "100%",
-          blockSize: "auto",
-          border: "1px solid var(--border)",
-          borderRadius: "8px",
-          background: "var(--surface-alt)",
-        }}
-      >
-        {ticks.map((t) => {
-          const gx = left + t * width;
-          const gy = bottom - t * height;
-          const xLabel = `$${Math.round((t * maxSpend) / 1000)}k`;
-          const yLabel = (t * maxContrib).toFixed(0);
-          return (
-            <g key={t}>
-              <line x1={gx} y1={top} x2={gx} y2={bottom} stroke="var(--border)" strokeDasharray="3 4" strokeWidth="1" />
-              <line x1={left} y1={gy} x2={right} y2={gy} stroke="var(--border)" strokeDasharray="3 4" strokeWidth="1" />
-              <text x={gx} y={bottom + 16} textAnchor="middle" fontSize="11" fill="var(--text-muted)">
-                {xLabel}
-              </text>
-              <text x={left - 8} y={gy + 4} textAnchor="end" fontSize="11" fill="var(--text-muted)">
-                {yLabel}
-              </text>
-            </g>
-          );
-        })}
-
-        <line x1={left} y1={bottom} x2={right} y2={bottom} stroke="var(--text-muted)" strokeWidth="1.5" />
-        <line x1={left} y1={top} x2={left} y2={bottom} stroke="var(--text-muted)" strokeWidth="1.5" />
-
-        <text x={(left + right) / 2} y={306} textAnchor="middle" fontSize="12" fontWeight="600" fill="var(--text)">
-          Weekly Channel Spend (USD)
-        </text>
-        <text
-          x={16}
-          y={(top + bottom) / 2}
-          textAnchor="middle"
-          fontSize="12"
-          fontWeight="600"
-          fill="var(--text)"
-          transform={`rotate(-90 16 ${(top + bottom) / 2})`}
-        >
-          {roasBlocked ? "Search Proxy Index Contribution" : "Expected Weekly Contribution"}
-        </text>
-
-        {series.map(({ row, color, pts }) => {
-          const polylinePts = pts.map((p) => `${mapX(p.spend).toFixed(1)},${mapY(p.contrib).toFixed(1)}`).join(" ");
-          const bx = mapX(row.baseline_weekly_spend_usd);
-          const by = mapY(row.baseline_contribution);
-          const sx = mapX(row.simulated_weekly_spend_usd);
-          const sy = mapY(row.simulated_contribution);
-          const label = formatChannelName(row.channel);
-          return (
-            <g key={row.channel}>
-              <polyline fill="none" stroke={color} strokeWidth="2.4" points={polylinePts} />
-              <circle cx={bx} cy={by} r="4.5" fill="var(--surface)" stroke={color} strokeWidth="2">
-                <title>{`${label} Baseline: ${fmtUsd(row.baseline_weekly_spend_usd)}/wk`}</title>
-              </circle>
-              <circle cx={sx} cy={sy} r="5.5" fill={color} stroke="var(--surface)" strokeWidth="1.5">
-                <title>{`${label} Proposed: ${fmtUsd(row.simulated_weekly_spend_usd)}/wk (${row.saturation_pct.toFixed(0)}% saturated)`}</title>
-              </circle>
-            </g>
-          );
-        })}
-      </svg>
-      <figcaption className="legend-row">
-        {series.map(({ row, color }) => (
-          <span key={row.channel} className="legend-item">
-            <span className="legend-swatch" style={{ backgroundColor: color }} aria-hidden="true" />
-            <span>{formatChannelName(row.channel)}</span>
-          </span>
-        ))}
-        <span>&middot; Hollow circle = baseline, solid dot = proposed spend.</span>
-      </figcaption>
-    </figure>
+    </div>
   );
 }
